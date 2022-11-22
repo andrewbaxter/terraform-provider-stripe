@@ -45,7 +45,6 @@ jobs:
         with:
           version: latest
           args: release --rm-dist
-          workdir: generated
         env:
           GPG_FINGERPRINT: ${{ steps.import_gpg.outputs.fingerprint }}
           # GitHub sets this automatically
