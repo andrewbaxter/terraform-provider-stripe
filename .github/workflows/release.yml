@@ -24,6 +24,14 @@ jobs:
         uses: actions/checkout@v3
       - name: Unshallow
         run: git fetch --prune --unshallow
+      - name: Cache openapi
+        id: cache-openapi
+        uses: actions/cache@v3
+        with:
+          path: stripe_openapi
+          key: stripe_openapi
+      - name: Submodules
+        run: git submodule update --init
       - name: Set up Go
         uses: actions/setup-go@v3
         with:
