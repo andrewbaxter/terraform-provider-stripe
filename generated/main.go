@@ -33,7 +33,7 @@ type Facilitator struct {
 	enc *form.Encoder
 }
 
-func (f *Facilitator) Post(ctx context.Context, path string, data map[string]string) (any, error) {
+func (f *Facilitator) Post(ctx context.Context, path string, data map[string]any) (any, error) {
 	res, err := f.c.R().SetFormDataFromValues(shared.Must(f.enc.Encode(data))).Post(path)
 	if err != nil {
 		return nil, err

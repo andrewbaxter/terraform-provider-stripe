@@ -6,3 +6,20 @@ func Must[T any](x T, err error) T {
 	}
 	return x
 }
+
+func Dig[T any](bla any, field string) T {
+	v, found := bla.(map[string]any)[field]
+	if !found {
+		return Default[T]()
+	}
+	v1, isT := v.(T)
+	if !isT {
+		panic("dug value not convertible")
+	}
+	return v1
+}
+
+func Default[T any]() T {
+	var out T
+	return out
+}

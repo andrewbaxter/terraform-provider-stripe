@@ -13,15 +13,18 @@ func (n *NodeArray) GenSchema() jen.Dict {
 	}
 }
 
-func (n *NodeArray) Validate(path jen.Code, v jen.Code) jen.Code {
-	return jen.Block(
+func (n *NodeArray) Validate(path jen.Code, v jen.Code) *jen.Code {
+	validate := n.Elem.Validate(
+		jen.Id("path").Dot("IndexInt").Call(jen.Id("i")),
+		jen.Id("v"),
+	)
+	if validate == nil {
+		return nil
+	}
+	var out jen.Code = jen.Block( // compiler workaround...
 		jen.Id("path").Op(":=").Add(path),
 		jen.Id("outerV").Op(":=").Add(v),
-		jen.For(jen.List(jen.Id("i"), jen.Id("v")).Op(":=").Range().Id("outerV").Assert(jen.Index().Any())).Block(
-			n.Elem.Validate(
-				jen.Id("path").Dot("IndexInt").Call(jen.Id("i")),
-				jen.Id("v"),
-			),
-		),
+		jen.For(jen.List(jen.Id("i"), jen.Id("v")).Op(":=").Range().Id("outerV").Assert(jen.Index().Any())).Block(*validate),
 	)
+	return &out
 }

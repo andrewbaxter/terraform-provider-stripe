@@ -25,7 +25,7 @@ func (n *NodeAnyOfObjs) GenSchema() jen.Dict {
 	}).GenSchema()
 }
 
-func (n *NodeAnyOfObjs) Validate(path jen.Code, v jen.Code) jen.Code {
+func (n *NodeAnyOfObjs) Validate(path jen.Code, v jen.Code) *jen.Code {
 	statements := []jen.Code{
 		jen.Id("path").Op(":=").Add(path),
 		jen.Id("outerV").Op(":=").Add(v).Assert(jen.Map(jen.String()).Any()),
@@ -44,10 +44,14 @@ func (n *NodeAnyOfObjs) Validate(path jen.Code, v jen.Code) jen.Code {
 			}
 			cond.Call(jen.Lit(f.Name), jen.Id("outerV"))
 		}
-		statements = append(statements, jen.If(cond).Block(
+		ifStatements := []jen.Code{
 			jen.Id("oneOk").Op("=").True(),
-			o.Validate(jen.Id("path"), jen.Id("outerV")),
-		))
+		}
+		validate := o.Validate(jen.Id("path"), jen.Id("outerV"))
+		if validate != nil {
+			ifStatements = append(ifStatements, *validate)
+		}
+		statements = append(statements, jen.If(cond).Block(ifStatements...))
 	}
 	statements = append(statements, jen.If(jen.Op("!").Id("oneOk")).Block(
 		jen.Id("out").Op("=").Id("append").Call(jen.Id("out"), jen.Qual(DiagPkg, "Diagnostic").Values(jen.Dict{
@@ -57,6 +61,6 @@ func (n *NodeAnyOfObjs) Validate(path jen.Code, v jen.Code) jen.Code {
 			jen.Id("AttributePath"): jen.Id("path"),
 		})),
 	))
-	// if not oneOk diag err
-	return jen.Block(statements...)
+	var out jen.Code = jen.Block(statements...) // unnecessary assignment due to go being stupid
+	return &out
 }

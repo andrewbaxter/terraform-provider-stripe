@@ -11,6 +11,6 @@ func (n *NodeInt) GenSchema() jen.Dict {
 	}
 }
 
-func (n *NodeInt) Validate(path jen.Code, v jen.Code) jen.Code {
-	return jen.Block()
+func (n *NodeInt) Validate(path jen.Code, v jen.Code) *jen.Code {
+	return nil
 }

@@ -42,6 +42,10 @@ func Filter[T any](x []T, m func(v T) bool) []T {
 	return out
 }
 
+func P[T any](x T) *T {
+	return &x
+}
+
 func FromSnake(s string) []string {
 	return strings.Split(s, "_")
 }
@@ -56,23 +60,6 @@ func ToCamel(parts []string) string {
 		out.WriteString(strings.ToUpper(string(part[0])) + part[1:])
 	}
 	return out.String()
-}
-
-func Default[T any]() T {
-	var out T
-	return out
-}
-
-func Dig[T any](bla any, field string) T {
-	v, found := bla.(map[string]any)[field]
-	if !found {
-		return Default[T]()
-	}
-	v1, isT := v.(T)
-	if !isT {
-		panic("dug value not convertible")
-	}
-	return v1
 }
 
 func Reunmarshal[T any](bla any) T {
@@ -117,8 +104,7 @@ const SharedPkg = "github.com/andrewbaxter/terraform-provider-stripe/shared"
 
 func AddDiagErr(exit bool, path jen.Code, t string, messageArgs ...jen.Code) *jen.Statement {
 	messageArgs = append([]jen.Code{
-		jen.Lit("%s: %w"),
-		jen.Lit(t),
+		jen.Lit(t + ": %s"),
 	}, messageArgs...)
 	messageArgs = append(messageArgs, jen.Id("err"))
 	statements := []jen.Code{
@@ -136,23 +122,23 @@ func AddDiagErr(exit bool, path jen.Code, t string, messageArgs ...jen.Code) *je
 
 type Node interface {
 	GenSchema() jen.Dict
-	Validate(path jen.Code, v jen.Code) jen.Code
+	Validate(path jen.Code, v jen.Code) *jen.Code
 }
 
 func BuildNode(spec any) Node {
-	type_ := Dig[string](spec, "type")
+	type_ := shared.Dig[string](spec, "type")
 	if type_ == "" {
-		anyOf := Dig[[]any](spec, "anyOf")
+		anyOf := shared.Dig[[]any](spec, "anyOf")
 		if anyOf != nil {
 			filtered := []any{}
 			allObj := true
 			for _, sub := range anyOf {
-				type_ := Dig[string](sub, "type")
+				type_ := shared.Dig[string](sub, "type")
 				switch type_ {
 				case "integer", "number", "boolean":
 					return BuildNode(sub)
 				case "string":
-					enum := Dig[[]any](sub, "enum")
+					enum := shared.Dig[[]any](sub, "enum")
 					if enum != nil {
 						if len(enum) == 1 && enum[0].(string) == "" {
 							continue
@@ -186,8 +172,9 @@ func BuildNode(spec any) Node {
 	switch type_ {
 	case "string":
 		spec := Reunmarshal[OpenApiString](spec)
+		enum := spec.Enum
 		return &NodeString{
-			Enum: spec.Enum,
+			Enum: enum,
 		}
 	case "boolean":
 		return &NodeBool{}
@@ -204,7 +191,7 @@ func BuildNode(spec any) Node {
 		return &NodeObj{
 			Fields: MapKVs(spec.Properties, func(propName string, prop any) NodeObjField {
 				return NodeObjField{
-					Description: Dig[string](prop, "description"),
+					Description: shared.Dig[string](prop, "description"),
 					Name:        propName,
 					Required:    required[propName],
 					Spec:        BuildNode(prop),
@@ -319,7 +306,7 @@ func main() {
 
 		fields.Fields = Filter(fields.Fields, func(v NodeObjField) bool {
 			switch v.Name {
-			case "expand", "metadata":
+			case "expand", "metadata", "active":
 				return false
 			default:
 				return true
@@ -332,7 +319,7 @@ func main() {
 		}
 		collName := ToSnake(collNameParts)
 		facilId := "f"
-		getClientStmt := jen.Id(facilId).Op(":=").Id("m").Assert(jen.Op("*").Id("Facilitator"))
+		getClientStmt := jen.Id(facilId).Op(":=").Id("f0").Assert(jen.Op("*").Id("Facilitator"))
 		createDiagStmt := jen.Id("out").Op(":=").Qual(DiagPkg, "Diagnostics").Values(jen.Dict{})
 		inputName := "d"
 		idExpr := jen.Id(inputName).Dot("Id").Call()
@@ -357,130 +344,155 @@ func main() {
 					return jen.True()
 				}
 			}()
-			topSchemaFields[jen.Lit(field.Name)] = jen.Op("&").Qual(SchemaPkg, "Schema").Values(fieldOut)
+			topSchemaFields[jen.Lit(field.Name)] = jen.Values(fieldOut)
 		}
 
-		jenResources[jen.Lit(collName)] = jen.Op("&").Qual(SchemaPkg, "Resource").Values(jen.Dict{
-			jen.Id("Schema"): jen.Map(jen.String()).Op("*").Qual(SchemaPkg, "Schema").Values(topSchemaFields),
+		jenResFile := jen.NewFile("main")
+		funcName := "resources_" + collName
+		jenResFile.Func().Id(funcName).Params().Op("*").Qual(SchemaPkg, "Resource").Block(
+			jen.Return(jen.Op("&").Qual(SchemaPkg, "Resource").Values(jen.Dict{
+				jen.Id("Schema"): jen.Map(jen.String()).Op("*").Qual(SchemaPkg, "Schema").Values(topSchemaFields),
 
-			jen.Id("CreateWithoutTimeout"): jen.Func().Params(
-				jen.Id("_").Qual("context", "Context"),
-				jen.Id(inputName).Op("*").Qual(SchemaPkg, "ResourceData"),
-				jen.Id("f0").Any(),
-			).Qual(DiagPkg, "Diagnostics").BlockFunc(func(g *jen.Group) {
-				paramsId := "params"
-				g.Add(getClientStmt)
-				g.Add(createDiagStmt)
-				g.Add(jen.Id(paramsId).Op(":=").Map(jen.String()).Any().Values(jen.Dict{}))
-				for _, field := range fields.Fields {
-					if field.Required {
-						g.Block(
+				jen.Id("CreateContext"): jen.Func().Params(
+					jen.Id("ctx").Qual("context", "Context"),
+					jen.Id(inputName).Op("*").Qual(SchemaPkg, "ResourceData"),
+					jen.Id("f0").Any(),
+				).Qual(DiagPkg, "Diagnostics").BlockFunc(func(g *jen.Group) {
+					paramsId := "params"
+					g.Add(getClientStmt)
+					g.Add(createDiagStmt)
+					g.Add(jen.Id(paramsId).Op(":=").Map(jen.String()).Any().Values(jen.Dict{}))
+					for _, field := range fields.Fields {
+						if field.Required {
+							statements := []jen.Code{
+								jen.Id("v").Op(":=").Id(inputName).Dot("Get").Call(jen.Lit(field.Name)),
+							}
+							validate := field.Spec.Validate(emptyPathExpr, jen.Id("v"))
+							if validate != nil {
+								statements = append(statements, *validate)
+							}
+							statements = append(statements, jen.Id(paramsId).Index(jen.Lit(field.Name)).Op("=").Id("v"))
+							g.Block(statements...)
+						} else {
+							statements := []jen.Code{}
+							validate := field.Spec.Validate(emptyPathExpr, jen.Id("v"))
+							if validate != nil {
+								statements = append(statements, *validate)
+							}
+							statements = append(statements, jen.Id(paramsId).Index(jen.Lit(field.Name)).Op("=").Id("v"))
+							g.If(jen.List(
+								jen.Id("v"),
+								jen.Id("exists"),
+							).Op(":=").Id(inputName).Dot("GetOk").Call(jen.Lit(field.Name)).Op(";").Id("exists")).Block(statements...)
+						}
+					}
+					g.Add(jen.List(jen.Id("res"), jen.Id("err")).Op(":=").Id(facilId).Dot("Post").Call(jen.Id("ctx"), jen.Lit(path), jen.Id(paramsId)))
+					g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to create new %s", objName)))
+					g.Add(jen.Id(inputName).Dot("SetId").Call(jen.Qual(SharedPkg, "Dig").Index(jen.String()).Call(jen.Id("res"), jen.Lit(idField))))
+					g.Add(jen.Return(jen.Id("out")))
+				}),
+
+				jen.Id("ReadContext"): jen.Func().Params(
+					jen.Id("ctx").Qual("context", "Context"),
+					jen.Id(inputName).Op("*").Qual(SchemaPkg, "ResourceData"),
+					jen.Id("f0").Any(),
+				).Qual(DiagPkg, "Diagnostics").BlockFunc(func(g *jen.Group) {
+					g.Add(getClientStmt)
+					g.Add(createDiagStmt)
+					g.Add(jen.List(jen.Id("res"), jen.Id("err")).Op(":=").Id(facilId).Dot("Get").Call(jen.Id("ctx"), idUrlPathExpr))
+					g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to look up %s %%s", objName), idExpr))
+					for _, field := range fields.Fields {
+						g.Add(jen.Id(inputName).Dot("Set").Call(
+							jen.Lit(field.Name),
+							jen.Qual(SharedPkg, "Dig").Index(jen.Any()).Call(jen.Id("res"), jen.Lit(field.Name)),
+						))
+					}
+					g.Add(jen.Return(jen.Id("out")))
+				}),
+
+				jen.Id("UpdateContext"): jen.Func().Params(
+					jen.Id("ctx").Qual("context", "Context"),
+					jen.Id(inputName).Op("*").Qual(SchemaPkg, "ResourceData"),
+					jen.Id("f0").Any(),
+				).Qual(DiagPkg, "Diagnostics").BlockFunc(func(g *jen.Group) {
+					paramsId := "params"
+					g.Add(getClientStmt)
+					g.Add(createDiagStmt)
+					g.Add(jen.Id(paramsId).Op(":=").Map(jen.String()).Any().Values(jen.Dict{}))
+					for _, field := range fields.Fields {
+						if !updatable[field.Name] {
+							continue
+						}
+						statements := []jen.Code{
 							jen.Id("v").Op(":=").Id(inputName).Dot("Get").Call(jen.Lit(field.Name)),
-							field.Spec.Validate(emptyPathExpr, jen.Id("v")),
-							jen.Id(paramsId).Index(jen.Lit(field.Name)).Op("=").Id("v"),
-						)
-					} else {
-						g.If(jen.List(
-							jen.Id("v"),
-							jen.Id("exists"),
-						).Op(":=").Id(inputName).Dot("GetOk").Call(jen.Lit(field.Name)).Op(";").Id("exists")).Block(
-							field.Spec.Validate(emptyPathExpr, jen.Id("v")),
-							jen.Id(paramsId).Index(jen.Lit(field.Name)).Op("=").Id("v"),
-						)
+						}
+						validate := field.Spec.Validate(emptyPathExpr, jen.Id("v"))
+						if validate != nil {
+							statements = append(statements, *validate)
+						}
+						statements = append(statements, jen.Id(paramsId).Index(jen.Lit(field.Name)).Op("=").Id("v"))
+						g.If(jen.Id(inputName).Dot("HasChange").Call(jen.Lit(field.Name))).Block(statements...)
 					}
-				}
-				g.Add(jen.List(jen.Id("res"), jen.Id("err")).Op(":=").Id(facilId).Dot("Post").Call(jen.Lit(path), jen.Id(paramsId)))
-				g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to create new %s", objName)))
-				g.Add(jen.Id(inputName).Dot("SetId").Call(jen.Id("Dig").Call(jen.Id("res"), jen.Lit(idField))))
-				g.Add(jen.Return(jen.Id("out")))
-			}),
-
-			jen.Id("ReadWithoutTimeout"): jen.Func().Params(
-				jen.Id("ctx").Qual("context", "Context"),
-				jen.Id(inputName).Op("*").Qual(SchemaPkg, "ResourceData"),
-				jen.Id("f0").Any(),
-			).Qual(DiagPkg, "Diagnostics").BlockFunc(func(g *jen.Group) {
-				g.Add(getClientStmt)
-				g.Add(createDiagStmt)
-				g.Add(jen.List(jen.Id("res"), jen.Id("err")).Op(":=").Id(facilId).Dot("Get").Call(idUrlPathExpr))
-				g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to look up %s %%s", objName), idExpr))
-				for _, field := range fields.Fields {
-					g.Add(jen.Id(inputName).Dot("Set").Call(
-						jen.Lit(field.Name),
-						jen.Id("Dig").Index(jen.Any()).Call(jen.Id("res"), jen.Lit(field.Name)),
-					))
-				}
-				g.Add(jen.Return(jen.Id("out")))
-			}),
-
-			jen.Id("UpdateWithoutTimeout"): jen.Func().Params(
-				jen.Id("ctx").Qual("context", "Context"),
-				jen.Id(inputName).Op("*").Qual(SchemaPkg, "ResourceData"),
-				jen.Id("f0").Any(),
-			).Qual(DiagPkg, "Diagnostics").BlockFunc(func(g *jen.Group) {
-				paramsId := "params"
-				g.Add(getClientStmt)
-				g.Add(createDiagStmt)
-				g.Add(jen.Id(paramsId).Op(":=").Map(jen.String()).Any().Values(jen.Dict{}))
-				for _, field := range fields.Fields {
-					if !updatable[field.Name] {
-						continue
-					}
-					g.If(jen.Id(inputName).Dot("HasChange").Call(jen.Lit(field.Name))).Block(
-						jen.Id("v").Op(":=").Id(inputName).Dot("Get").Call(jen.Lit(field.Name)),
-						field.Spec.Validate(emptyPathExpr, jen.Id("v")),
-						jen.Id(paramsId).Index(jen.Lit(field.Name)).Op("=").Id("v"),
-					)
-				}
-				g.Add(jen.List(jen.Id("_"), jen.Id("err")).Op(":=").Id(facilId).Dot("Post").Call(
-					idUrlPathExpr,
-					jen.Id(paramsId),
-				))
-				g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to update %s %%s", objName), idExpr))
-				g.Add(jen.Return(jen.Id("out")))
-			}),
-
-			jen.Id("DeleteWithoutTimeout"): jen.Func().Params(
-				jen.Id("ctx").Qual("context", "Context"),
-				jen.Id(inputName).Op("*").Qual(SchemaPkg, "ResourceData"),
-				jen.Id("f0").Any(),
-			).Qual(DiagPkg, "Diagnostics").BlockFunc(func(g *jen.Group) {
-				g.Add(getClientStmt)
-				g.Add(createDiagStmt)
-				if hasDelete {
-					g.Add(jen.Id("err").Op(":=").Id(facilId).Dot("Delete").Call(idUrlPathExpr))
-					g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to delete %s %%s", objName), idExpr))
-				} else if hasActive {
 					g.Add(jen.List(jen.Id("_"), jen.Id("err")).Op(":=").Id(facilId).Dot("Post").Call(
+						jen.Id("ctx"),
 						idUrlPathExpr,
-						jen.Map(jen.String()).Any().Values(jen.Dict{
-							jen.Lit("active"): jen.False(),
-						}),
+						jen.Id(paramsId),
 					))
-					g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to set active to false %s %%s", objName), idExpr))
-				} else {
-					panic("ASSERTION")
-				}
-				g.Add(jen.Return(jen.Id("out")))
-			}),
-		})
+					g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to update %s %%s", objName), idExpr))
+					g.Add(jen.Return(jen.Id("out")))
+				}),
+
+				jen.Id("DeleteContext"): jen.Func().Params(
+					jen.Id("ctx").Qual("context", "Context"),
+					jen.Id(inputName).Op("*").Qual(SchemaPkg, "ResourceData"),
+					jen.Id("f0").Any(),
+				).Qual(DiagPkg, "Diagnostics").BlockFunc(func(g *jen.Group) {
+					g.Add(getClientStmt)
+					g.Add(createDiagStmt)
+					if hasDelete {
+						g.Add(jen.Id("err").Op(":=").Id(facilId).Dot("Delete").Call(jen.Id("ctx"), idUrlPathExpr))
+						g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to delete %s %%s", objName), idExpr))
+					} else if hasActive {
+						g.Add(jen.List(jen.Id("_"), jen.Id("err")).Op(":=").Id(facilId).Dot("Post").Call(
+							jen.Id("ctx"),
+							idUrlPathExpr,
+							jen.Map(jen.String()).Any().Values(jen.Dict{
+								jen.Lit("active"): jen.False(),
+							}),
+						))
+						g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to set active to false on %s %%s", objName), idExpr))
+					} else {
+						panic("ASSERTION")
+					}
+					g.Add(jen.Return(jen.Id("out")))
+				}),
+			})),
+		)
+		jenResources[jen.Lit(collName)] = jen.Id(funcName).Call()
+		err = jenResFile.Save(fmt.Sprintf("generated/resources_%s.go", collName))
+		if err != nil {
+			panic(err)
+		}
 	}
 
 	// Wrap and output
-	jenFile := jen.NewFile("main")
-	jenFile.Func().Id("resources").Params().Map(jen.String()).Op("*").Qual(SchemaPkg, "Resource").Block(
-		jen.Return(jen.Map(jen.String()).Op("*").Qual(SchemaPkg, "Resource").Values(jenResources)),
-	)
-	gitHash, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
-	if err != nil {
-		panic(err)
+	{
+		jenFile := jen.NewFile("main")
+		jenFile.Func().Id("resources").Params().Map(jen.String()).Op("*").Qual(SchemaPkg, "Resource").Block(
+			jen.Return(jen.Map(jen.String()).Op("*").Qual(SchemaPkg, "Resource").Values(jenResources)),
+		)
+		gitHash, err := exec.Command("git", "rev-parse", "--short", "HEAD").Output()
+		if err != nil {
+			panic(err)
+		}
+		jenFile.Func().Id("gitHash").Params().String().Block(
+			jen.Return(jen.Lit(strings.TrimSpace(string(gitHash)))),
+		)
+		err = jenFile.Save("generated/resources.go")
+		if err != nil {
+			panic(err)
+		}
 	}
-	jenFile.Func().Id("gitHash").Params().String().Block(
-		jen.Return(jen.Lit(strings.TrimSpace(string(gitHash)))),
-	)
-	err = jenFile.Save("generated/resources.go")
-	if err != nil {
-		panic(err)
-	}
+
 	log.Printf("Done.")
 }
