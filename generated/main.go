@@ -65,8 +65,9 @@ func main() {
 				},
 				"ratelimit": {
 					Description: "Rate limit, max requests per second",
-					Default:     10,
 					Type:        schema.TypeInt,
+					Optional:    true,
+					Default:     10,
 				},
 			},
 			ResourcesMap: resources(),

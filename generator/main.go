@@ -330,20 +330,14 @@ func main() {
 		for _, field := range fields.Fields {
 			fieldOut := field.Spec.GenSchema()
 			fieldOut[jen.Id("Description")] = jen.Lit(field.Description)
-			fieldOut[jen.Id("Required")] = func() *jen.Statement {
-				if field.Required {
-					return jen.True()
-				} else {
-					return jen.False()
-				}
-			}()
-			fieldOut[jen.Id("ForceNew")] = func() *jen.Statement {
-				if updatable[field.Name] {
-					return jen.False()
-				} else {
-					return jen.True()
-				}
-			}()
+			if field.Required {
+				fieldOut[jen.Id("Required")] = jen.True()
+			} else {
+				fieldOut[jen.Id("Optional")] = jen.True()
+			}
+			if !updatable[field.Name] {
+				fieldOut[jen.Id("ForceNew")] = jen.True()
+			}
 			topSchemaFields[jen.Lit(field.Name)] = jen.Values(fieldOut)
 		}
 
@@ -468,7 +462,7 @@ func main() {
 				}),
 			})),
 		)
-		jenResources[jen.Lit(collName)] = jen.Id(funcName).Call()
+		jenResources[jen.Lit("stripe_"+collName)] = jen.Id(funcName).Call()
 		err = jenResFile.Save(fmt.Sprintf("generated/resources_%s.go", collName))
 		if err != nil {
 			panic(err)

@@ -18,13 +18,11 @@ func (n *NodeObj) GenSchema() jen.Dict {
 	for _, field := range n.Fields {
 		fieldOut := field.Spec.GenSchema()
 		fieldOut[jen.Id("Description")] = jen.Lit(field.Description)
-		fieldOut[jen.Id("Required")] = func() *jen.Statement {
-			if field.Required {
-				return jen.True()
-			} else {
-				return jen.False()
-			}
-		}()
+		if field.Required {
+			fieldOut[jen.Id("Required")] = jen.True()
+		} else {
+			fieldOut[jen.Id("Optional")] = jen.True()
+		}
 		outFields[jen.Lit(field.Name)] = jen.Values(fieldOut)
 	}
 	return jen.Dict{
