@@ -1,15 +1,19 @@
+// This file isn't actually generated
 package main
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/http"
 
 	"github.com/andrewbaxter/terraform-provider-stripe/shared"
 	"github.com/go-playground/form/v4"
 	"github.com/go-resty/resty/v2"
 	schema "github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	plugin "github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
+	"github.com/stripe/stripe-go/v74"
+	"go.uber.org/ratelimit"
 )
 
 func main() {
@@ -20,21 +24,70 @@ func main() {
 				c.SetBasicAuth(d.Get("token").(string), "")
 				c.SetHeader("User-Agent", fmt.Sprintf("github.com/andrewbaxter/terraform-provider-stripe %s", gitHash()))
 				c.SetBaseURL("https://api.stripe.com")
-				return Facilitator{c: c}, nil
+				c.SetRetryCount(3)
+				c.AddRetryCondition(func(resp *resty.Response, err error) bool {
+					// Based on https://github.com/stripe/stripe-go/blob/e6cd1eb064432902f0b195f613b00379bfb0b87a/stripe.go#L779
+					req := resp.Request
+					if req.Context() != nil && req.Context().Err() != nil {
+						return false
+					}
+					if resp.Header().Get("Stripe-Should-Retry") == "false" {
+						return false
+					}
+					if resp.Header().Get("Stripe-Should-Retry") == "true" {
+						return true
+					}
+					switch resp.StatusCode() {
+					case http.StatusConflict:
+						return true
+					case http.StatusTooManyRequests:
+						return true
+					case http.StatusServiceUnavailable:
+						return true
+					}
+					if resp.StatusCode() >= http.StatusInternalServerError && req.Method != http.MethodPost {
+						return true
+					}
+					return false
+				})
+				rateCount := d.Get("ratelimit").(int)
+				return Facilitator{
+					c:     c,
+					enc:   form.NewEncoder(),
+					limit: ratelimit.New(rateCount, ratelimit.WithSlack(rateCount)),
+				}, nil
 			},
-			Schema:       map[string]*schema.Schema{"token": {Type: schema.TypeString}},
+			Schema: map[string]*schema.Schema{
+				"token": {
+					Description: "Stripe API token",
+					Type:        schema.TypeString,
+					Required:    true,
+				},
+				"ratelimit": {
+					Description: "Rate limit, max requests per second",
+					Default:     10,
+					Type:        schema.TypeInt,
+				},
+			},
 			ResourcesMap: resources(),
 		}
 	}})
 }
 
+const HeaderIdempotencyKey = "Idempotency-Key"
+
 type Facilitator struct {
-	c   *resty.Client
-	enc *form.Encoder
+	c     *resty.Client
+	enc   *form.Encoder
+	limit ratelimit.Limiter
 }
 
 func (f *Facilitator) Post(ctx context.Context, path string, data map[string]any) (any, error) {
-	res, err := f.c.R().SetFormDataFromValues(shared.Must(f.enc.Encode(data))).Post(path)
+	f.limit.Take()
+	res, err := f.c.R().
+		SetHeader(HeaderIdempotencyKey, stripe.NewIdempotencyKey()).
+		SetFormDataFromValues(shared.Must(f.enc.Encode(data))).
+		Post(path)
 	if err != nil {
 		return nil, err
 	}
@@ -50,6 +103,7 @@ func (f *Facilitator) Post(ctx context.Context, path string, data map[string]any
 }
 
 func (f *Facilitator) Get(ctx context.Context, path string) (any, error) {
+	f.limit.Take()
 	res, err := f.c.R().Get(path)
 	if err != nil {
 		return nil, err
@@ -66,7 +120,10 @@ func (f *Facilitator) Get(ctx context.Context, path string) (any, error) {
 }
 
 func (f *Facilitator) Delete(ctx context.Context, path string) error {
-	res, err := f.c.R().Delete(path)
+	f.limit.Take()
+	res, err := f.c.R().
+		SetHeader(HeaderIdempotencyKey, stripe.NewIdempotencyKey()).
+		Delete(path)
 	if err != nil {
 		return err
 	}
