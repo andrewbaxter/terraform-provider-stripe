@@ -445,7 +445,7 @@ func main() {
 		})
 
 		collNameParts := []string{}
-		for _, seg := range strings.Split(path, "/")[2:] {
+		for _, seg := range strings.Split(objName, ".") {
 			collNameParts = append(collNameParts, FromSnake(seg)...)
 		}
 		collName := ToSnake(collNameParts)
