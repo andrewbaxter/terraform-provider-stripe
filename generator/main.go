@@ -16,6 +16,18 @@ func Last[T any](x []T) T {
 	return x[len(x)-1]
 }
 
+func DigOpt[T any](bla any, field string) *T {
+	v, found := bla.(map[string]any)[field]
+	if !found {
+		return nil
+	}
+	v1, isT := v.(T)
+	if !isT {
+		panic("dug value not convertible")
+	}
+	return &v1
+}
+
 func Map[T any, G any](x []T, m func(v T) G) []G {
 	out := make([]G, len(x))
 	for i := 0; i < len(x); i++ {
@@ -42,8 +54,41 @@ func Filter[T any](x []T, m func(v T) bool) []T {
 	return out
 }
 
+func Flatten[T any](x [][]T) []T {
+	total := 0
+	for _, y := range x {
+		total += len(y)
+	}
+	out := make([]T, 0, total)
+	for _, y := range x {
+		out = append(out, y...)
+	}
+	return out
+}
+
 func P[T any](x T) *T {
 	return &x
+}
+
+type Usable[T any] struct {
+	used bool
+	f    func() T
+}
+
+func (u *Usable[T]) Use() T {
+	u.used = true
+	return u.f()
+}
+
+func (u *Usable[T]) WasUsed() bool {
+	return u.used
+}
+
+func Unused[T any](f func() T) *Usable[T] {
+	return &Usable[T]{
+		used: false,
+		f:    f,
+	}
 }
 
 func FromSnake(s string) []string {
@@ -71,10 +116,6 @@ func Reunmarshal[T any](bla any) T {
 	return out
 }
 
-type OpenApiPrim struct {
-	Description string `json:"description"`
-}
-
 type OpenApiString struct {
 	Description string   `json:"description"`
 	Enum        []string `json:"enum"`
@@ -86,46 +127,109 @@ type OpenApiArray struct {
 	Items       any    `json:"items"`
 }
 
-type OpenApiObjField struct {
-	Description string `json:"description"`
-	Type        string `json:"type"`
-}
-
 type OpenApiObj struct {
-	Description string         `json:"description"`
-	Properties  map[string]any `json:"properties"`
-	Required    []string       `json:"required"`
+	Description          string         `json:"description"`
+	AdditionalProperties any            `json:"additionalProperties"`
+	Properties           map[string]any `json:"properties"`
+	Required             []string       `json:"required"`
 }
 
 const SchemaPkg = "github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 const DiagPkg = "github.com/hashicorp/terraform-plugin-sdk/v2/diag"
 const CtyPkg = "github.com/hashicorp/go-cty/cty"
 const SharedPkg = "github.com/andrewbaxter/terraform-provider-stripe/shared"
+const DiagId = "out"
 
-func AddDiagErr(exit bool, path jen.Code, t string, messageArgs ...jen.Code) *jen.Statement {
+func CondAddDiagErr(exit bool, path jen.Code, t string, messageArgs ...jen.Code) *jen.Statement {
 	messageArgs = append([]jen.Code{
 		jen.Lit(t + ": %s"),
 	}, messageArgs...)
 	messageArgs = append(messageArgs, jen.Id("err"))
 	statements := []jen.Code{
-		jen.Id("out").Op("=").Id("append").Call(jen.Id("out"), jen.Qual(DiagPkg, "Diagnostic").Values(jen.Dict{
+		jen.Id(DiagId).Op("=").Id("append").Call(jen.Id(DiagId), jen.Qual(DiagPkg, "Diagnostic").Values(jen.Dict{
 			jen.Id("Severity"):      jen.Qual(DiagPkg, "Error"),
 			jen.Id("Summary"):       jen.Qual("fmt", "Sprintf").Call(messageArgs...),
 			jen.Id("AttributePath"): path,
 		})),
 	}
 	if exit {
-		statements = append(statements, jen.Return(jen.Id("out")))
+		statements = append(statements, jen.Return(jen.Id(DiagId)))
 	}
 	return jen.If(jen.Id("err").Op("!=").Nil()).Block(statements...)
 }
 
-type Node interface {
-	GenSchema() jen.Dict
-	Validate(path jen.Code, v jen.Code) *jen.Code
+type TfDestColl interface {
+	Field(key string) TfDestVal
 }
 
-func BuildNode(spec any) Node {
+type MapTfDestColl string
+
+func (d *MapTfDestColl) Field(key string) TfDestVal {
+	return &MapTfDestVal{
+		Base: string(*d),
+		Key:  jen.Lit(key),
+	}
+}
+
+type RootTfDestColl string
+
+func (d *RootTfDestColl) Field(key string) TfDestVal {
+	return &RootTfDestVal{
+		Base: string(*d),
+		Key:  key,
+	}
+}
+
+type TfDestVal interface {
+	Set(value jen.Code) jen.Code
+}
+
+type RootTfDestVal struct {
+	Base string
+	Key  string
+}
+
+func (d *RootTfDestVal) Set(value jen.Code) jen.Code {
+	return jen.Id(d.Base).Dot("Set").Call(jen.Lit(d.Key), value)
+}
+
+type MapTfDestVal struct {
+	Base string
+	Key  jen.Code
+}
+
+func (d *MapTfDestVal) Set(val jen.Code) jen.Code {
+	return jen.Id(d.Base).Index(d.Key).Op("=").Add(val)
+}
+
+type ArrayTfDestVal string
+
+func (d *ArrayTfDestVal) Set(val jen.Code) jen.Code {
+	return jen.Id(string(*d)).Op("=").Append(jen.Id(string(*d)), val)
+}
+
+type Node interface {
+	// Generate a partial field definition
+	GenField() jen.Dict
+	// Generate a complete schema for use in a collection (map/list)
+	GenElem() jen.Code
+	// Read the value from apiSource and place it in tfDest
+	ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code
+	// Expression that checks the raw (any) value in tfSource and returns the value in the shape the api expects.
+	// For objects, this means turning a flattened map into nested maps for nested object specs.
+	ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) jen.Code
+}
+
+func FlattenField(tfPrefix string, field *NodeObjField) {
+	field.TfKey = tfPrefix + field.TfKey
+	if objNode, isObjNode := field.Spec.(*NodeObj); isObjNode {
+		for _, subfield := range objNode.Fields {
+			FlattenField(field.TfKey+"_", subfield)
+		}
+	}
+}
+
+func BuildNode(refs map[string]OpenApiObj, spec any) *Node {
 	type_ := shared.Dig[string](spec, "type")
 	if type_ == "" {
 		anyOf := shared.Dig[[]any](spec, "anyOf")
@@ -136,7 +240,7 @@ func BuildNode(spec any) Node {
 				type_ := shared.Dig[string](sub, "type")
 				switch type_ {
 				case "integer", "number", "boolean":
-					return BuildNode(sub)
+					return BuildNode(refs, sub)
 				case "string":
 					enum := shared.Dig[[]any](sub, "enum")
 					if enum != nil {
@@ -144,7 +248,7 @@ func BuildNode(spec any) Node {
 							continue
 						}
 					} else {
-						return BuildNode(sub)
+						return BuildNode(refs, sub)
 					}
 					allObj = false
 				case "object":
@@ -157,52 +261,76 @@ func BuildNode(spec any) Node {
 				filtered = append(filtered, sub)
 			}
 			if len(filtered) == 1 {
-				return BuildNode(filtered[0])
+				return BuildNode(refs, filtered[0])
 			}
 			if allObj {
-				return &NodeAnyOfObjs{
+				return P[Node](&NodeAnyOfObjs{
 					Options: Map(filtered, func(o any) *NodeObj {
-						return BuildNode(o).(*NodeObj)
+						return (*BuildNode(refs, o)).(*NodeObj)
 					}),
-				}
+				})
 			}
 			panic("TODO")
+		}
+	}
+	if type_ == "" {
+		ref := DigOpt[string](spec, "$ref")
+		if ref != nil {
+			elemName := Last(strings.Split(*ref, "/"))
+			return BuildNode(refs, refs[elemName])
 		}
 	}
 	switch type_ {
 	case "string":
 		spec := Reunmarshal[OpenApiString](spec)
 		enum := spec.Enum
-		return &NodeString{
+		return P[Node](&NodeString{
 			Enum: enum,
-		}
+		})
 	case "boolean":
-		return &NodeBool{}
+		return P[Node](&NodeBool{})
 	case "integer":
-		return &NodeInt{}
+		return P[Node](&NodeInt{})
 	case "number":
-		return &NodeFloat{}
+		return P[Node](&NodeFloat{})
 	case "object":
 		spec := Reunmarshal[OpenApiObj](spec)
-		required := map[string]bool{}
-		for _, paramName := range spec.Required {
-			required[paramName] = true
-		}
-		return &NodeObj{
-			Fields: MapKVs(spec.Properties, func(propName string, prop any) NodeObjField {
-				return NodeObjField{
-					Description: shared.Dig[string](prop, "description"),
-					Name:        propName,
-					Required:    required[propName],
-					Spec:        BuildNode(prop),
+		if len(spec.Properties) > 0 {
+			required := map[string]bool{}
+			for _, paramName := range spec.Required {
+				required[paramName] = true
+			}
+			fields := []*NodeObjField{}
+			for propName, prop := range spec.Properties {
+				propNode := BuildNode(refs, prop)
+				if propNode == nil {
+					continue
 				}
-			}),
+				field := &NodeObjField{
+					Description: shared.Dig[string](prop, "description"),
+					ApiKey:      propName,
+					TfKey:       propName,
+					Required:    required[propName],
+					Spec:        *propNode,
+				}
+				FlattenField("", field)
+				fields = append(fields, field)
+			}
+			return P[Node](&NodeObj{
+				Fields: fields,
+			})
+		} else if spec.AdditionalProperties != nil {
+			return P[Node](&NodeMap{
+				Elem: *BuildNode(refs, spec.AdditionalProperties),
+			})
+		} else {
+			return nil
 		}
 	case "array":
 		spec := Reunmarshal[OpenApiArray](spec)
-		return &NodeArray{
-			Elem: BuildNode(spec.Items),
-		}
+		return P[Node](&NodeArray{
+			Elem: *BuildNode(refs, spec.Items),
+		})
 	default:
 		panic(fmt.Sprintf("Unhandled schema param type [[%s]]", type_))
 	}
@@ -289,11 +417,14 @@ func main() {
 			log.Printf("Skipping %s, no post schema", path)
 			continue
 		}
-		fields := BuildNode(post.RequestBody.Content.FormUrlencoded.Schema).(*NodeObj)
+		fields := (*BuildNode(
+			spec.Components.Schemas,
+			post.RequestBody.Content.FormUrlencoded.Schema,
+		)).(*NodeObj)
 
 		hasActive := false
 		for _, f := range fields.Fields {
-			if f.Name == "active" {
+			if f.ApiKey == "active" {
 				hasActive = true
 				break
 			}
@@ -304,8 +435,8 @@ func main() {
 			continue
 		}
 
-		fields.Fields = Filter(fields.Fields, func(v NodeObjField) bool {
-			switch v.Name {
+		fields.Fields = Filter(fields.Fields, func(v *NodeObjField) bool {
+			switch v.ApiKey {
 			case "expand", "metadata", "active":
 				return false
 			default:
@@ -320,25 +451,29 @@ func main() {
 		collName := ToSnake(collNameParts)
 		facilId := "f"
 		getClientStmt := jen.Id(facilId).Op(":=").Id("f0").Assert(jen.Op("*").Id("Facilitator"))
-		createDiagStmt := jen.Id("out").Op(":=").Qual(DiagPkg, "Diagnostics").Values(jen.Dict{})
+		createDiagStmt := jen.Id(DiagId).Op(":=").Qual(DiagPkg, "Diagnostics").Values(jen.Dict{})
 		inputName := "d"
 		idExpr := jen.Id(inputName).Dot("Id").Call()
 		idUrlPathExpr := jen.Qual("fmt", "Sprintf").Call(jen.Lit(path+"/%v"), jen.Id(inputName).Dot("Get").Call(jen.Lit(idField)))
-		emptyPathExpr := jen.Qual(CtyPkg, "Path").Values(jen.Dict{})
+		emptyPathExpr := Unused(func() jen.Code { return jen.Qual(CtyPkg, "Path").Values(jen.Dict{}) })
 
 		topSchemaFields := jen.Dict{}
 		for _, field := range fields.Fields {
-			fieldOut := field.Spec.GenSchema()
-			fieldOut[jen.Id("Description")] = jen.Lit(field.Description)
-			if field.Required {
-				fieldOut[jen.Id("Required")] = jen.True()
+			if objField, isObj := field.Spec.(*NodeObj); isObj {
+				objField.genFieldInner(topSchemaFields)
 			} else {
-				fieldOut[jen.Id("Optional")] = jen.True()
+				fieldOut := field.Spec.GenField()
+				fieldOut[jen.Id("Description")] = jen.Lit(field.Description)
+				if field.Required {
+					fieldOut[jen.Id("Required")] = jen.True()
+				} else {
+					fieldOut[jen.Id("Optional")] = jen.True()
+				}
+				if !updatable[field.ApiKey] {
+					fieldOut[jen.Id("ForceNew")] = jen.True()
+				}
+				topSchemaFields[jen.Lit(field.ApiKey)] = jen.Values(fieldOut)
 			}
-			if !updatable[field.Name] {
-				fieldOut[jen.Id("ForceNew")] = jen.True()
-			}
-			topSchemaFields[jen.Lit(field.Name)] = jen.Values(fieldOut)
 		}
 
 		jenResFile := jen.NewFile("main")
@@ -358,32 +493,29 @@ func main() {
 					g.Add(jen.Id(paramsId).Op(":=").Map(jen.String()).Any().Values(jen.Dict{}))
 					for _, field := range fields.Fields {
 						if field.Required {
-							statements := []jen.Code{
-								jen.Id("v").Op(":=").Id(inputName).Dot("Get").Call(jen.Lit(field.Name)),
-							}
-							validate := field.Spec.Validate(emptyPathExpr, jen.Id("v"))
-							if validate != nil {
-								statements = append(statements, *validate)
-							}
-							statements = append(statements, jen.Id(paramsId).Index(jen.Lit(field.Name)).Op("=").Id("v"))
-							g.Block(statements...)
+							g.Add(jen.Id(paramsId).Index(jen.Lit(field.ApiKey)).Op("=").Add(
+								field.Spec.ValidateSetApi(
+									emptyPathExpr,
+									jen.Id(inputName).Dot("Get").Call(jen.Lit(field.TfKey)),
+								)))
 						} else {
-							statements := []jen.Code{}
-							validate := field.Spec.Validate(emptyPathExpr, jen.Id("v"))
-							if validate != nil {
-								statements = append(statements, *validate)
-							}
-							statements = append(statements, jen.Id(paramsId).Index(jen.Lit(field.Name)).Op("=").Id("v"))
 							g.If(jen.List(
 								jen.Id("v"),
 								jen.Id("exists"),
-							).Op(":=").Id(inputName).Dot("GetOk").Call(jen.Lit(field.Name)).Op(";").Id("exists")).Block(statements...)
+							).Op(":=").Id(inputName).Dot("GetOk").Call(jen.Lit(field.TfKey)).Op(";").Id("exists")).Block(
+								jen.Id(paramsId).Index(jen.Lit(field.ApiKey)).Op("=").Add(
+									field.Spec.ValidateSetApi(emptyPathExpr, jen.Id("v")),
+								),
+							)
 						}
 					}
+					g.Add(jen.If(jen.Len(jen.Id(DiagId)).Op(">").Lit(0)).Block(
+						jen.Return(jen.Id(DiagId)),
+					))
 					g.Add(jen.List(jen.Id("res"), jen.Id("err")).Op(":=").Id(facilId).Dot("Post").Call(jen.Id("ctx"), jen.Lit(path), jen.Id(paramsId)))
-					g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to create new %s", objName)))
+					g.Add(CondAddDiagErr(true, emptyPathExpr.Use(), fmt.Sprintf("failed to create new %s", objName)))
 					g.Add(jen.Id(inputName).Dot("SetId").Call(jen.Qual(SharedPkg, "Dig").Index(jen.String()).Call(jen.Id("res"), jen.Lit(idField))))
-					g.Add(jen.Return(jen.Id("out")))
+					g.Add(jen.Return(jen.Id(DiagId)))
 				}),
 
 				jen.Id("ReadContext"): jen.Func().Params(
@@ -394,14 +526,11 @@ func main() {
 					g.Add(getClientStmt)
 					g.Add(createDiagStmt)
 					g.Add(jen.List(jen.Id("res"), jen.Id("err")).Op(":=").Id(facilId).Dot("Get").Call(jen.Id("ctx"), idUrlPathExpr))
-					g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to look up %s %%s", objName), idExpr))
-					for _, field := range fields.Fields {
-						g.Add(jen.Id(inputName).Dot("Set").Call(
-							jen.Lit(field.Name),
-							jen.Qual(SharedPkg, "Dig").Index(jen.Any()).Call(jen.Id("res"), jen.Lit(field.Name)),
-						))
+					g.Add(CondAddDiagErr(true, emptyPathExpr.Use(), fmt.Sprintf("failed to look up %s %%s", objName), idExpr))
+					for _, statement := range fields.readApiInner(jen.Id("res"), P(RootTfDestColl(inputName))) {
+						g.Add(statement)
 					}
-					g.Add(jen.Return(jen.Id("out")))
+					g.Add(jen.Return(jen.Id(DiagId)))
 				}),
 
 				jen.Id("UpdateContext"): jen.Func().Params(
@@ -414,26 +543,28 @@ func main() {
 					g.Add(createDiagStmt)
 					g.Add(jen.Id(paramsId).Op(":=").Map(jen.String()).Any().Values(jen.Dict{}))
 					for _, field := range fields.Fields {
-						if !updatable[field.Name] {
+						if !updatable[field.TfKey] {
 							continue
 						}
-						statements := []jen.Code{
-							jen.Id("v").Op(":=").Id(inputName).Dot("Get").Call(jen.Lit(field.Name)),
-						}
-						validate := field.Spec.Validate(emptyPathExpr, jen.Id("v"))
-						if validate != nil {
-							statements = append(statements, *validate)
-						}
-						statements = append(statements, jen.Id(paramsId).Index(jen.Lit(field.Name)).Op("=").Id("v"))
-						g.If(jen.Id(inputName).Dot("HasChange").Call(jen.Lit(field.Name))).Block(statements...)
+						g.If(jen.Id(inputName).Dot("HasChange").Call(jen.Lit(field.ApiKey))).Block(
+							jen.Id(paramsId).Index(jen.Lit(field.ApiKey)).Op("=").Add(
+								field.Spec.ValidateSetApi(
+									emptyPathExpr,
+									jen.Id(inputName).Dot("Get").Call(jen.Lit(field.TfKey)),
+								),
+							),
+						)
 					}
+					g.Add(jen.If(jen.Len(jen.Id(DiagId)).Op(">").Lit(0)).Block(
+						jen.Return(jen.Id(DiagId)),
+					))
 					g.Add(jen.List(jen.Id("_"), jen.Id("err")).Op(":=").Id(facilId).Dot("Post").Call(
 						jen.Id("ctx"),
 						idUrlPathExpr,
 						jen.Id(paramsId),
 					))
-					g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to update %s %%s", objName), idExpr))
-					g.Add(jen.Return(jen.Id("out")))
+					g.Add(CondAddDiagErr(true, emptyPathExpr.Use(), fmt.Sprintf("failed to update %s %%s", objName), idExpr))
+					g.Add(jen.Return(jen.Id(DiagId)))
 				}),
 
 				jen.Id("DeleteContext"): jen.Func().Params(
@@ -445,7 +576,7 @@ func main() {
 					g.Add(createDiagStmt)
 					if hasDelete {
 						g.Add(jen.Id("err").Op(":=").Id(facilId).Dot("Delete").Call(jen.Id("ctx"), idUrlPathExpr))
-						g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to delete %s %%s", objName), idExpr))
+						g.Add(CondAddDiagErr(true, emptyPathExpr.Use(), fmt.Sprintf("failed to delete %s %%s", objName), idExpr))
 					} else if hasActive {
 						g.Add(jen.List(jen.Id("_"), jen.Id("err")).Op(":=").Id(facilId).Dot("Post").Call(
 							jen.Id("ctx"),
@@ -454,11 +585,11 @@ func main() {
 								jen.Lit("active"): jen.False(),
 							}),
 						))
-						g.Add(AddDiagErr(true, emptyPathExpr, fmt.Sprintf("failed to set active to false on %s %%s", objName), idExpr))
+						g.Add(CondAddDiagErr(true, emptyPathExpr.Use(), fmt.Sprintf("failed to set active to false on %s %%s", objName), idExpr))
 					} else {
 						panic("ASSERTION")
 					}
-					g.Add(jen.Return(jen.Id("out")))
+					g.Add(jen.Return(jen.Id(DiagId)))
 				}),
 			})),
 		)
@@ -489,4 +620,8 @@ func main() {
 	}
 
 	log.Printf("Done.")
+}
+
+func FakeScope(t jen.Code, body []jen.Code) jen.Code {
+	return jen.Func().Params().Add(t).Block(body...).Call()
 }
