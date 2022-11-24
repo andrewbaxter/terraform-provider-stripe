@@ -25,7 +25,7 @@ description: |-
 - `customer` (String) The customer that this promotion code can be used by. If not set, the promotion code can be used by all customers.
 - `expires_at` (Number) The timestamp at which this promotion code will expire. If the coupon has specified a `redeems_by`, then this value cannot be after the coupon's `redeems_by`.
 - `max_redemptions` (Number) A positive integer specifying the number of times the promotion code can be redeemed. If the coupon has specified a `max_redemptions`, then this value cannot be greater than the coupon's `max_redemptions`.
-- `restrictions_currency_options` (Map of String)
+- `restrictions_currency_options` (Block List) (see [below for nested schema](#nestedblock--restrictions_currency_options))
 - `restrictions_first_time_transaction` (Boolean)
 - `restrictions_minimum_amount` (Number)
 - `restrictions_minimum_amount_currency` (String)
@@ -33,5 +33,16 @@ description: |-
 ### Read-Only
 
 - `id` (String) The ID of this resource.
+
+<a id="nestedblock--restrictions_currency_options"></a>
+### Nested Schema for `restrictions_currency_options`
+
+Required:
+
+- `key` (String) Key for this field in parent map (synthetic to work around Terraform limitations)
+
+Optional:
+
+- `minimum_amount` (Number)
 
 

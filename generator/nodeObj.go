@@ -11,7 +11,8 @@ type NodeObjField struct {
 }
 
 type NodeObj struct {
-	Fields []*NodeObjField
+	FakeMapField bool // Workaround terraform limitations
+	Fields       []*NodeObjField
 }
 
 func (n *NodeObj) genFieldInner(outFields jen.Dict, flattenParentOptional bool) {
@@ -37,6 +38,13 @@ func (n *NodeObj) GenField() jen.Dict {
 
 func (n *NodeObj) GenElem() jen.Code {
 	outFields := jen.Dict{}
+	if n.FakeMapField {
+		outFields[jen.Lit("key")] = jen.Values(jen.Dict{
+			jen.Id("Type"):        jen.Qual(SchemaPkg, "TypeString"),
+			jen.Id("Description"): jen.Lit("Key for this field in parent map (synthetic to work around Terraform limitations)"),
+			jen.Id("Required"):    jen.True(),
+		})
+	}
 	n.genFieldInner(outFields, false)
 	return jen.Op("&").Qual(SchemaPkg, "Resource").Values(jen.Dict{
 		jen.Id("Schema"): jen.Map(jen.String()).Op("*").Qual(SchemaPkg, "Schema").Values(outFields),
@@ -67,10 +75,18 @@ func (n *NodeObj) readApiInner(apiSource jen.Code, tfDest TfDestColl) []jen.Code
 func (n *NodeObj) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 	apiSourceId := "outerSource"
 	tfDestId := "dest"
-	return []jen.Code{
+	statements := []jen.Code{
 		jen.Comment("NodeObj ReadApi"),
 		jen.Id(apiSourceId).Op(":=").Add(apiSource),
 		jen.Id(tfDestId).Op(":=").Map(jen.String()).Any().Values(),
+	}
+	if n.FakeMapField {
+		statements = append(statements,
+			jen.Id(tfDestId).Index(jen.Lit("key")).Op("=").Id("k"),
+		)
+	}
+	statements = append(
+		statements,
 		jen.Block(Flatten([][]jen.Code{
 			{
 				jen.Id("outerDest").Op(":=").Id(tfDestId),
@@ -78,7 +94,8 @@ func (n *NodeObj) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 			n.readApiInner(jen.Id(apiSourceId), P(MapTfDestColl("outerDest"))),
 		})...),
 		tfDest.Set(jen.Id(tfDestId)),
-	}
+	)
+	return statements
 }
 
 func (n *NodeObj) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) jen.Code {
@@ -86,6 +103,13 @@ func (n *NodeObj) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) je
 	apiDestId := "dest"
 	fields := []jen.Code{}
 	childPath := Unused(func() jen.Code { return jen.Id("path") })
+	if n.FakeMapField {
+		fields = append(
+			fields,
+			jen.Id(apiDestId).Index(jen.Lit("key")).Op("=").
+				Qual(SharedPkg, "Dig").Index(jen.String()).Call(jen.Id(tfSourceId), jen.Lit("key")),
+		)
+	}
 	for _, field := range n.Fields {
 		if objField, isObj := field.Spec.(*NodeObj); isObj {
 			// Flattened nested objects

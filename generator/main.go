@@ -320,9 +320,17 @@ func BuildNode(refs map[string]OpenApiObj, spec any) *Node {
 				Fields: fields,
 			})
 		} else if spec.AdditionalProperties != nil {
-			return P[Node](&NodeMap{
-				Elem: *BuildNode(refs, spec.AdditionalProperties),
-			})
+			elem := *BuildNode(refs, spec.AdditionalProperties)
+			if objElem, isObj := elem.(*NodeObj); isObj {
+				objElem.FakeMapField = true
+				return P[Node](&NodeFakeMap{
+					Elem: elem,
+				})
+			} else {
+				return P[Node](&NodeMap{
+					Elem: elem,
+				})
+			}
 		} else {
 			return nil
 		}
@@ -457,23 +465,35 @@ func main() {
 		idUrlPathExpr := jen.Qual("fmt", "Sprintf").Call(jen.Lit(path+"/%v"), jen.Id(inputName).Dot("Get").Call(jen.Lit(idField)))
 		emptyPathExpr := Unused(func() jen.Code { return jen.Qual(CtyPkg, "Path").Values(jen.Dict{}) })
 
+		noneUpdatable := true
 		topSchemaFields := jen.Dict{}
 		for _, field := range fields.Fields {
+			if updatable[field.ApiKey] {
+				noneUpdatable = false
+			}
 			if objField, isObj := field.Spec.(*NodeObj); isObj {
 				objField.genFieldInner(topSchemaFields, !field.Required)
 			} else {
 				fieldOut := field.Spec.GenField()
 				fieldOut[jen.Id("Description")] = jen.Lit(field.Description)
-				if field.Required {
-					fieldOut[jen.Id("Required")] = jen.True()
+				if field.TfKey == "id" {
+					fieldOut[jen.Id("Computed")] = jen.True()
 				} else {
-					fieldOut[jen.Id("Optional")] = jen.True()
-				}
-				if !updatable[field.ApiKey] {
-					fieldOut[jen.Id("ForceNew")] = jen.True()
+					if field.Required {
+						fieldOut[jen.Id("Required")] = jen.True()
+					} else {
+						fieldOut[jen.Id("Optional")] = jen.True()
+					}
+					if !updatable[field.ApiKey] {
+						fieldOut[jen.Id("ForceNew")] = jen.True()
+					}
 				}
 				topSchemaFields[jen.Lit(field.ApiKey)] = jen.Values(fieldOut)
 			}
+		}
+		if noneUpdatable {
+			log.Printf("Skipping %s, no updatable fields", path)
+			continue
 		}
 
 		jenResFile := jen.NewFile("main")

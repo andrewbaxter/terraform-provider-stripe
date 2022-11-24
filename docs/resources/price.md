@@ -22,7 +22,7 @@ description: |-
 ### Optional
 
 - `billing_scheme` (String) Describes how to compute the price per period. Either `per_unit` or `tiered`. `per_unit` indicates that the fixed amount (specified in `unit_amount` or `unit_amount_decimal`) will be charged per unit in `quantity` (for prices with `usage_type=licensed`), or per unit of total usage (for prices with `usage_type=metered`). `tiered` indicates that the unit pricing will be computed using a tiering strategy as defined using the `tiers` and `tiers_mode` attributes.
-- `currency_options` (Map of String) Prices defined in each available currency option. Each key must be a three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html) and a [supported currency](https://stripe.com/docs/currencies).
+- `currency_options` (Block List) Prices defined in each available currency option. Each key must be a three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html) and a [supported currency](https://stripe.com/docs/currencies). (see [below for nested schema](#nestedblock--currency_options))
 - `custom_unit_amount_enabled` (Boolean)
 - `custom_unit_amount_maximum` (Number)
 - `custom_unit_amount_minimum` (Number)
@@ -53,6 +53,40 @@ description: |-
 ### Read-Only
 
 - `id` (String) The ID of this resource.
+
+<a id="nestedblock--currency_options"></a>
+### Nested Schema for `currency_options`
+
+Required:
+
+- `key` (String) Key for this field in parent map (synthetic to work around Terraform limitations)
+
+Optional:
+
+- `custom_unit_amount_enabled` (Boolean)
+- `custom_unit_amount_maximum` (Number)
+- `custom_unit_amount_minimum` (Number)
+- `custom_unit_amount_preset` (Number)
+- `tax_behavior` (String)
+- `tiers` (Block List) (see [below for nested schema](#nestedblock--currency_options--tiers))
+- `unit_amount` (Number)
+- `unit_amount_decimal` (String)
+
+<a id="nestedblock--currency_options--tiers"></a>
+### Nested Schema for `currency_options.tiers`
+
+Required:
+
+- `up_to` (Number)
+
+Optional:
+
+- `flat_amount` (Number)
+- `flat_amount_decimal` (String)
+- `unit_amount` (Number)
+- `unit_amount_decimal` (String)
+
+
 
 <a id="nestedblock--tiers"></a>
 ### Nested Schema for `tiers`
