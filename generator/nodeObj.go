@@ -14,14 +14,14 @@ type NodeObj struct {
 	Fields []*NodeObjField
 }
 
-func (n *NodeObj) genFieldInner(outFields jen.Dict) {
+func (n *NodeObj) genFieldInner(outFields jen.Dict, flattenParentOptional bool) {
 	for _, field := range n.Fields {
 		if objField, isObj := field.Spec.(*NodeObj); isObj {
-			objField.genFieldInner(outFields)
+			objField.genFieldInner(outFields, flattenParentOptional || !field.Required)
 		} else {
 			fieldOut := field.Spec.GenField()
 			fieldOut[jen.Id("Description")] = jen.Lit(field.Description)
-			if field.Required {
+			if !flattenParentOptional && field.Required {
 				fieldOut[jen.Id("Required")] = jen.True()
 			} else {
 				fieldOut[jen.Id("Optional")] = jen.True()
@@ -37,7 +37,7 @@ func (n *NodeObj) GenField() jen.Dict {
 
 func (n *NodeObj) GenElem() jen.Code {
 	outFields := jen.Dict{}
-	n.genFieldInner(outFields)
+	n.genFieldInner(outFields, false)
 	return jen.Op("&").Qual(SchemaPkg, "Resource").Values(jen.Dict{
 		jen.Id("Schema"): jen.Map(jen.String()).Op("*").Qual(SchemaPkg, "Schema").Values(outFields),
 	})

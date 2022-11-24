@@ -460,7 +460,7 @@ func main() {
 		topSchemaFields := jen.Dict{}
 		for _, field := range fields.Fields {
 			if objField, isObj := field.Spec.(*NodeObj); isObj {
-				objField.genFieldInner(topSchemaFields)
+				objField.genFieldInner(topSchemaFields, !field.Required)
 			} else {
 				fieldOut := field.Spec.GenField()
 				fieldOut[jen.Id("Description")] = jen.Lit(field.Description)
