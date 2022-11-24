@@ -51,7 +51,7 @@ func main() {
 					return false
 				})
 				rateCount := d.Get("ratelimit").(int)
-				return Facilitator{
+				return &Facilitator{
 					c:     c,
 					enc:   form.NewEncoder(),
 					limit: ratelimit.New(rateCount, ratelimit.WithSlack(rateCount)),
