@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"os"
 
 	"github.com/andrewbaxter/terraform-provider-stripe/shared"
 	"github.com/go-playground/form/v4"
@@ -15,6 +17,16 @@ import (
 	"github.com/stripe/stripe-go/v74"
 	"go.uber.org/ratelimit"
 )
+
+func IsDebug() bool {
+	v, _ := os.LookupEnv("STRIPE_TF_DEBUG")
+	return v != ""
+}
+
+func Json(x any) string {
+	out, _ := json.MarshalIndent(x, "", "  ")
+	return string(out)
+}
 
 func main() {
 	plugin.Serve(&plugin.ServeOpts{ProviderFunc: func() *schema.Provider {
@@ -85,6 +97,9 @@ type Facilitator struct {
 
 func (f *Facilitator) Post(ctx context.Context, path string, data map[string]any) (any, error) {
 	f.limit.Take()
+	if IsDebug() {
+		log.Printf("POST %s\n%s", path, Json(data))
+	}
 	res, err := f.c.R().
 		SetHeader(HeaderIdempotencyKey, stripe.NewIdempotencyKey()).
 		SetFormDataFromValues(shared.Must(f.enc.Encode(data))).
@@ -105,6 +120,9 @@ func (f *Facilitator) Post(ctx context.Context, path string, data map[string]any
 
 func (f *Facilitator) Get(ctx context.Context, path string) (any, error) {
 	f.limit.Take()
+	if IsDebug() {
+		log.Printf("GET %s", path)
+	}
 	res, err := f.c.R().Get(path)
 	if err != nil {
 		return nil, err
@@ -122,6 +140,9 @@ func (f *Facilitator) Get(ctx context.Context, path string) (any, error) {
 
 func (f *Facilitator) Delete(ctx context.Context, path string) error {
 	f.limit.Take()
+	if IsDebug() {
+		log.Printf("DELETE %s", path)
+	}
 	res, err := f.c.R().
 		SetHeader(HeaderIdempotencyKey, stripe.NewIdempotencyKey()).
 		Delete(path)

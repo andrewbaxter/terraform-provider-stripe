@@ -1,6 +1,6 @@
 This is an unofficial Terraform provider for [Stripe](https://stripe.com/) automatically generated from their OpenAPI spec.
 
-If you find any issues with it or it needs to be updated please let me know.
+If you find any issues with it or it needs to be updated please let me know!
 
 * [Terraform Registry](https://registry.terraform.io/providers/andrewbaxter/stripe)
 
@@ -31,3 +31,12 @@ Run
 ```
 
 This will generate the source files and render the docs.
+
+# Troubleshooting
+
+You can see some info on the HTTP requests by setting environment variable
+```
+STRIPE_TF_DEBUG=1
+```
+
+before running Terraform.
