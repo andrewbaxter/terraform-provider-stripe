@@ -36,7 +36,20 @@ This will generate the source files and render the docs.
 
 You can see some info on the HTTP requests by setting environment variable
 ```
-STRIPE_TF_DEBUG=1
+TF_LOG_PROVIDER=JSON
 ```
 
 before running Terraform.
+
+# Technical details
+
+Terraform spec challenges
+1. Objects nested under objects aren't allowed. There's a workaround (`TfSource` and `TfDest`) implemented that abstracts around flattening child fields into the parent object. This is decently clean.
+2. Objects can't be placed in arbitrary KV maps. The workaround here is a `FakeMap` which is an array with an extra `key` field which gets transformed into/from a map on the api side. This is decently clean.
+3. No support for unions. This is partially worked around by provider-side validation, but it might not be perfect (some invalid configs may be let through - hopefully caught by the API itself).
+
+Stripe API challenges
+1. Malformed objects, enums, enums with only one empty element, empty objects, etc.
+2. Infinite reference loops
+
+Working around the Stripe issues ended up being very ugly, I'm hoping I can clean up the workarounds to at least make the code more readable at some point.

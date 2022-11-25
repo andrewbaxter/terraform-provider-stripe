@@ -249,6 +249,7 @@ func BuildNode(
 		var ref_ = ""
 		if s, ref := deref(createSpec); ref != "" {
 			if seenRefs[ref] {
+				log.Printf("Encountered infinite ref loop at %s", ref)
 				return nil
 			}
 			ref_ = ref
@@ -256,6 +257,7 @@ func BuildNode(
 		}
 		if s, ref := deref(updateSpec); ref != "" {
 			if seenRefs[ref] {
+				log.Printf("Encountered infinite ref loop at %s", ref)
 				return nil
 			}
 			ref_ = ref
@@ -263,6 +265,7 @@ func BuildNode(
 		}
 		if s, ref := deref(getSpec); ref != "" {
 			if seenRefs[ref] {
+				log.Printf("Encountered infinite ref loop at %s", ref)
 				return nil
 			}
 			ref_ = ref
@@ -292,6 +295,7 @@ func BuildNode(
 		ref_ := ""
 		if s, ref := deref(createSpec); ref != "" {
 			if seenRefs[ref] {
+				log.Printf("Encountered infinite ref loop at %s", ref)
 				return nil
 			}
 			ref_ = ref
@@ -299,6 +303,7 @@ func BuildNode(
 		}
 		if s, ref := deref(updateSpec); ref != "" {
 			if seenRefs[ref] {
+				log.Printf("Encountered infinite ref loop at %s", ref)
 				return nil
 			}
 			ref_ = ref
@@ -306,6 +311,7 @@ func BuildNode(
 		}
 		if s, ref := deref(getSpec); ref != "" {
 			if seenRefs[ref] {
+				log.Printf("Encountered infinite ref loop at %s", ref)
 				return nil
 			}
 			ref_ = ref
