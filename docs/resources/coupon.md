@@ -18,7 +18,7 @@ description: |-
 ### Optional
 
 - `amount_off` (Number) A positive integer representing the amount to subtract from an invoice total (required if `percent_off` is not passed).
-- `applies_to_products` (List of String)
+- `applies_to_products` (List of String) A list of product IDs this coupon applies to
 - `currency` (String) Three-letter [ISO code for the currency](https://stripe.com/docs/currencies) of the `amount_off` parameter (required if `amount_off` is passed).
 - `currency_options` (Block List) Coupons defined in each available currency option (only supported if `amount_off` is passed). Each key must be a three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html) and a [supported currency](https://stripe.com/docs/currencies). (see [below for nested schema](#nestedblock--currency_options))
 - `duration` (String) Specifies how long the discount will be in effect if used on a subscription. Defaults to `once`.
@@ -30,14 +30,19 @@ description: |-
 
 ### Read-Only
 
+- `created` (Number) Time at which the object was created. Measured in seconds since the Unix epoch.
 - `id` (String) Unique string of your choice that will be used to identify this coupon when applying it to a customer. If you don't want to specify a particular code, you can leave the ID blank and we'll generate a random code for you.
+- `livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
+- `object` (String) String representing the object's type. Objects of the same type share the same value.
+- `times_redeemed` (Number) Number of times this coupon has been applied to a customer.
+- `valid` (Boolean) Taking account of the above properties, whether this coupon can still be applied to a customer.
 
 <a id="nestedblock--currency_options"></a>
 ### Nested Schema for `currency_options`
 
 Required:
 
-- `amount_off` (Number)
+- `amount_off` (Number) Amount (in the `currency` specified) that will be taken off the subtotal of any invoices for this customer.
 - `key` (String) Key for this field in parent map (synthetic to work around Terraform limitations)
 
 

@@ -25,11 +25,10 @@ description: |-
 - `currency` (String) Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies).
 - `description` (String) An arbitrary string which you can attach to the invoice item. The description is displayed in the invoice for easy tracking.
 - `discountable` (Boolean) Controls whether discounts apply to this invoice item. Defaults to false for prorations or negative invoice items, and true for all other invoice items.
-- `discounts` (Block List) The coupons to redeem into discounts for the invoice item or invoice line item. (see [below for nested schema](#nestedblock--discounts))
+- `discounts` (List of String) The coupons to redeem into discounts for the invoice item or invoice line item.
 - `invoice` (String) The ID of an existing invoice to add this invoice item to. When left blank, the invoice item will be added to the next upcoming scheduled invoice. This is useful when adding invoice items in response to an invoice.created webhook. You can only add invoice items to draft invoices and there is a maximum of 250 items per invoice.
-- `period_end` (Number)
-- `period_start` (Number)
-- `price` (String) The ID of the price object.
+- `period_end` (Number) The end of the period, which must be greater than or equal to the start.
+- `period_start` (Number) The start of the period.
 - `price_data_currency` (String)
 - `price_data_product` (String)
 - `price_data_tax_behavior` (String)
@@ -39,20 +38,104 @@ description: |-
 - `subscription` (String) The ID of a subscription to add this invoice item to. When left blank, the invoice item will be be added to the next upcoming scheduled invoice. When set, scheduled invoices for subscriptions other than the specified subscription will ignore the invoice item. Use this when you want to express that an invoice item has been accrued within the context of a particular subscription.
 - `tax_behavior` (String) Specifies whether the price is considered inclusive of taxes or exclusive of taxes. One of `inclusive`, `exclusive`, or `unspecified`. Once specified as either `inclusive` or `exclusive`, it cannot be changed.
 - `tax_code` (String) A [tax code](https://stripe.com/docs/tax/tax-categories) ID.
-- `tax_rates` (List of String) The tax rates which apply to the invoice item. When set, the `default_tax_rates` on the invoice do not apply to this invoice item.
 - `unit_amount` (Number) The integer unit amount in cents (or local equivalent) of the charge to be applied to the upcoming invoice. This `unit_amount` will be multiplied by the quantity to get the full amount. Passing in a negative `unit_amount` will reduce the `amount_due` on the invoice.
 - `unit_amount_decimal` (String) Same as `unit_amount`, but accepts a decimal value in cents (or local equivalent) with at most 12 decimal places. Only one of `unit_amount` and `unit_amount_decimal` can be set.
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `date` (Number) Time at which the object was created. Measured in seconds since the Unix epoch.
+- `id` (String) Unique identifier for the object.
+- `livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
+- `object` (String) String representing the object's type. Objects of the same type share the same value.
+- `price_active` (Boolean) Whether the price can be used for new purchases.
+- `price_billing_scheme` (String) Describes how to compute the price per period. Either `per_unit` or `tiered`. `per_unit` indicates that the fixed amount (specified in `unit_amount` or `unit_amount_decimal`) will be charged per unit in `quantity` (for prices with `usage_type=licensed`), or per unit of total usage (for prices with `usage_type=metered`). `tiered` indicates that the unit pricing will be computed using a tiering strategy as defined using the `tiers` and `tiers_mode` attributes.
+- `price_created` (Number) Time at which the object was created. Measured in seconds since the Unix epoch.
+- `price_currency` (String) Three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html), in lowercase. Must be a [supported currency](https://stripe.com/docs/currencies).
+- `price_currency_options` (List of Object) Prices defined in each available currency option. Each key must be a three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html) and a [supported currency](https://stripe.com/docs/currencies). (see [below for nested schema](#nestedatt--price_currency_options))
+- `price_custom_unit_amount_maximum` (Number) The maximum unit amount the customer can specify for this item.
+- `price_custom_unit_amount_minimum` (Number) The minimum unit amount the customer can specify for this item. Must be at least the minimum charge amount.
+- `price_custom_unit_amount_preset` (Number) The starting unit amount which can be updated by the customer.
+- `price_id` (String) Unique identifier for the object.
+- `price_livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
+- `price_lookup_key` (String) A lookup key used to retrieve prices dynamically from a static string. This may be up to 200 characters.
+- `price_metadata` (Map of String) Set of [key-value pairs](https://stripe.com/docs/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format.
+- `price_nickname` (String) A brief description of the price, hidden from customers.
+- `price_object` (String) String representing the object's type. Objects of the same type share the same value.
+- `price_product` (String) The ID of the product this price is associated with.
+- `price_recurring_aggregate_usage` (String) Specifies a usage aggregation strategy for prices of `usage_type=metered`. Allowed values are `sum` for summing up all usage during a period, `last_during_period` for using the last usage record reported within a period, `last_ever` for using the last usage record ever (across period bounds) or `max` which uses the usage record with the maximum reported usage during a period. Defaults to `sum`.
+- `price_recurring_interval` (String) The frequency at which a subscription is billed. One of `day`, `week`, `month` or `year`.
+- `price_recurring_interval_count` (Number) The number of intervals (specified in the `interval` attribute) between subscription billings. For example, `interval=month` and `interval_count=3` bills every 3 months.
+- `price_recurring_usage_type` (String) Configures how the quantity per period should be determined. Can be either `metered` or `licensed`. `licensed` automatically bills the `quantity` set when adding it to a subscription. `metered` aggregates the total usage based on usage records. Defaults to `licensed`.
+- `price_tax_behavior` (String) Specifies whether the price is considered inclusive of taxes or exclusive of taxes. One of `inclusive`, `exclusive`, or `unspecified`. Once specified as either `inclusive` or `exclusive`, it cannot be changed.
+- `price_tiers` (List of Object) Each element represents a pricing tier. This parameter requires `billing_scheme` to be set to `tiered`. See also the documentation for `billing_scheme`. (see [below for nested schema](#nestedatt--price_tiers))
+- `price_tiers_mode` (String) Defines if the tiering price should be `graduated` or `volume` based. In `volume`-based tiering, the maximum quantity within a period determines the per unit price. In `graduated` tiering, pricing can change as the quantity grows.
+- `price_transform_quantity_divide_by` (Number) Divide usage by this number.
+- `price_transform_quantity_round` (String) After division, either round the result `up` or `down`.
+- `price_type` (String) One of `one_time` or `recurring` depending on whether the price is for a one-time purchase or a recurring (subscription) purchase.
+- `price_unit_amount` (Number) The unit amount in %s to be charged, represented as a whole integer if possible. Only set if `billing_scheme=per_unit`.
+- `price_unit_amount_decimal` (String) The unit amount in %s to be charged, represented as a decimal string with at most 12 decimal places. Only set if `billing_scheme=per_unit`.
+- `proration` (Boolean) Whether the invoice item was created automatically as a proration adjustment when the customer switched plans.
+- `subscription_item` (String) The subscription item that this invoice item has been created for, if any.
+- `tax_rates` (Block List) The tax rates which apply to the invoice item. When set, the `default_tax_rates` on the invoice do not apply to this invoice item. (see [below for nested schema](#nestedblock--tax_rates))
+- `test_clock` (String) ID of the test clock this invoice item belongs to.
 
-<a id="nestedblock--discounts"></a>
-### Nested Schema for `discounts`
+<a id="nestedatt--price_currency_options"></a>
+### Nested Schema for `price_currency_options`
 
-Optional:
+Read-Only:
 
-- `coupon` (String)
-- `discount` (String)
+- `custom_unit_amount_maximum` (Number)
+- `custom_unit_amount_minimum` (Number)
+- `custom_unit_amount_preset` (Number)
+- `key` (String)
+- `tax_behavior` (String)
+- `tiers` (List of Object) (see [below for nested schema](#nestedobjatt--price_currency_options--tiers))
+- `unit_amount` (Number)
+- `unit_amount_decimal` (String)
+
+<a id="nestedobjatt--price_currency_options--tiers"></a>
+### Nested Schema for `price_currency_options.tiers`
+
+Read-Only:
+
+- `flat_amount` (Number)
+- `flat_amount_decimal` (String)
+- `unit_amount` (Number)
+- `unit_amount_decimal` (String)
+- `up_to` (Number)
+
+
+
+<a id="nestedatt--price_tiers"></a>
+### Nested Schema for `price_tiers`
+
+Read-Only:
+
+- `flat_amount` (Number)
+- `flat_amount_decimal` (String)
+- `unit_amount` (Number)
+- `unit_amount_decimal` (String)
+- `up_to` (Number)
+
+
+<a id="nestedblock--tax_rates"></a>
+### Nested Schema for `tax_rates`
+
+Read-Only:
+
+- `active` (Boolean) Defaults to `true`. When set to `false`, this tax rate cannot be used with new applications or Checkout Sessions, but will still work for subscriptions and invoices that already have it set.
+- `country` (String) Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
+- `created` (Number) Time at which the object was created. Measured in seconds since the Unix epoch.
+- `description` (String) An arbitrary string attached to the tax rate for your internal use only. It will not be visible to your customers.
+- `display_name` (String) The display name of the tax rates as it will appear to your customer on their receipt email, PDF, and the hosted invoice page.
+- `id` (String) Unique identifier for the object.
+- `inclusive` (Boolean) This specifies if the tax rate is inclusive or exclusive.
+- `jurisdiction` (String) The jurisdiction for the tax rate. You can use this label field for tax reporting purposes. It also appears on your customer’s invoice.
+- `livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
+- `metadata` (Map of String) Set of [key-value pairs](https://stripe.com/docs/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format.
+- `object` (String) String representing the object's type. Objects of the same type share the same value.
+- `percentage` (Number) This represents the tax rate percent out of 100.
+- `state` (String) [ISO 3166-2 subdivision code](https://en.wikipedia.org/wiki/ISO_3166-2:US), without country prefix. For example, "NY" for New York, United States.
+- `tax_type` (String) The high-level tax type, such as `vat` or `sales_tax`.
 
 

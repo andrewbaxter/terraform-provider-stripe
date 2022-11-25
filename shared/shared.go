@@ -1,5 +1,7 @@
 package shared
 
+import "fmt"
+
 func Must[T any](x T, err error) T {
 	if err != nil {
 		panic(err)
@@ -7,28 +9,32 @@ func Must[T any](x T, err error) T {
 	return x
 }
 
-func Dig[T any](bla any, field string) T {
-	v, found := bla.(map[string]any)[field]
+func DigAny(source any, key string) any {
+	return source.(map[string]any)[key]
+}
+
+func Dig[T any](source any, key string) T {
+	v, found := source.(map[string]any)[key]
 	if !found {
 		return Default[T]()
 	}
 	v1, isT := v.(T)
 	if !isT {
-		panic("dug value not convertible")
+		panic(fmt.Sprintf("dug value for key %s not convertible: %#v", key, v))
 	}
 	return v1
 }
 
-func DigDelete[T any](bla any, field string) T {
-	bla1 := bla.(map[string]any)
-	v, found := bla1[field]
+func DigDelete[T any](source any, key string) T {
+	source1 := source.(map[string]any)
+	v, found := source1[key]
 	if !found {
 		return Default[T]()
 	}
-	delete(bla1, field)
+	delete(source1, key)
 	v1, isT := v.(T)
 	if !isT {
-		panic("dug value not convertible")
+		panic(fmt.Sprintf("dug value for key %s not convertible: %#v", key, v))
 	}
 	return v1
 }
@@ -36,4 +42,9 @@ func DigDelete[T any](bla any, field string) T {
 func Default[T any]() T {
 	var out T
 	return out
+}
+
+func InMap(key string, m map[string]any) bool {
+	_, res := m[key]
+	return res
 }

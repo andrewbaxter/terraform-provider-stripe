@@ -17,53 +17,56 @@ description: |-
 
 ### Optional
 
-- `bbpos_wisepos_e_splashscreen` (String)
-- `tipping_aud_aud_fixed_amounts` (List of Number)
-- `tipping_aud_aud_percentages` (List of Number)
-- `tipping_aud_aud_smart_tip_threshold` (Number)
-- `tipping_cad_cad_fixed_amounts` (List of Number)
-- `tipping_cad_cad_percentages` (List of Number)
-- `tipping_cad_cad_smart_tip_threshold` (Number)
-- `tipping_chf_chf_fixed_amounts` (List of Number)
-- `tipping_chf_chf_percentages` (List of Number)
-- `tipping_chf_chf_smart_tip_threshold` (Number)
-- `tipping_czk_czk_fixed_amounts` (List of Number)
-- `tipping_czk_czk_percentages` (List of Number)
-- `tipping_czk_czk_smart_tip_threshold` (Number)
-- `tipping_dkk_dkk_fixed_amounts` (List of Number)
-- `tipping_dkk_dkk_percentages` (List of Number)
-- `tipping_dkk_dkk_smart_tip_threshold` (Number)
-- `tipping_eur_eur_fixed_amounts` (List of Number)
-- `tipping_eur_eur_percentages` (List of Number)
-- `tipping_eur_eur_smart_tip_threshold` (Number)
-- `tipping_gbp_gbp_fixed_amounts` (List of Number)
-- `tipping_gbp_gbp_percentages` (List of Number)
-- `tipping_gbp_gbp_smart_tip_threshold` (Number)
-- `tipping_hkd_hkd_fixed_amounts` (List of Number)
-- `tipping_hkd_hkd_percentages` (List of Number)
-- `tipping_hkd_hkd_smart_tip_threshold` (Number)
-- `tipping_myr_myr_fixed_amounts` (List of Number)
-- `tipping_myr_myr_percentages` (List of Number)
-- `tipping_myr_myr_smart_tip_threshold` (Number)
-- `tipping_nok_nok_fixed_amounts` (List of Number)
-- `tipping_nok_nok_percentages` (List of Number)
-- `tipping_nok_nok_smart_tip_threshold` (Number)
-- `tipping_nzd_nzd_fixed_amounts` (List of Number)
-- `tipping_nzd_nzd_percentages` (List of Number)
-- `tipping_nzd_nzd_smart_tip_threshold` (Number)
-- `tipping_sek_sek_fixed_amounts` (List of Number)
-- `tipping_sek_sek_percentages` (List of Number)
-- `tipping_sek_sek_smart_tip_threshold` (Number)
-- `tipping_sgd_sgd_fixed_amounts` (List of Number)
-- `tipping_sgd_sgd_percentages` (List of Number)
-- `tipping_sgd_sgd_smart_tip_threshold` (Number)
-- `tipping_usd_usd_fixed_amounts` (List of Number)
-- `tipping_usd_usd_percentages` (List of Number)
-- `tipping_usd_usd_smart_tip_threshold` (Number)
-- `verifone_p400_splashscreen` (String)
+- `bbpos_wisepos_e_splashscreen` (String) A File ID representing an image you would like displayed on the reader.
+- `tipping_aud_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_aud_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_aud_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_cad_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_cad_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_cad_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_chf_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_chf_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_chf_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_czk_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_czk_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_czk_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_dkk_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_dkk_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_dkk_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_eur_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_eur_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_eur_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_gbp_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_gbp_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_gbp_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_hkd_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_hkd_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_hkd_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_myr_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_myr_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_myr_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_nok_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_nok_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_nok_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_nzd_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_nzd_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_nzd_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_sek_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_sek_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_sek_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_sgd_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_sgd_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_sgd_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `tipping_usd_fixed_amounts` (List of Number) Fixed amounts displayed when collecting a tip
+- `tipping_usd_percentages` (List of Number) Percentages displayed when collecting a tip
+- `tipping_usd_smart_tip_threshold` (Number) Below this amount, fixed amounts will be displayed; above it, percentages will be displayed
+- `verifone_p400_splashscreen` (String) A File ID representing an image you would like displayed on the reader.
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `id` (String) Unique identifier for the object.
+- `is_account_default` (Boolean) Whether this Configuration is the default for your account
+- `livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
+- `object` (String) String representing the object's type. Objects of the same type share the same value.
 
 

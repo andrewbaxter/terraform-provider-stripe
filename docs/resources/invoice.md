@@ -20,7 +20,7 @@ description: |-
 - `account_tax_ids` (List of String) The account tax IDs associated with the invoice. Only editable when the invoice is a draft.
 - `application_fee_amount` (Number) A fee in cents (or local equivalent) that will be applied to the invoice and transferred to the application owner's Stripe account. The request must be made with an OAuth key or the Stripe-Account header in order to take an application fee. For more information, see the application fees [documentation](https://stripe.com/docs/billing/invoices/connect#collecting-fees).
 - `auto_advance` (Boolean) Controls whether Stripe will perform [automatic collection](https://stripe.com/docs/billing/invoices/workflow/#auto_advance) of the invoice. When `false`, the invoice's state will not automatically advance without an explicit action.
-- `automatic_tax_enabled` (Boolean)
+- `automatic_tax_enabled` (Boolean) Whether Stripe automatically computes tax on this invoice. Note that incompatible invoice items (invoice items with manually specified [tax rates](https://stripe.com/docs/api/tax_rates), negative amounts, or `tax_behavior=unspecified`) cannot be added to automatic tax invoices.
 - `collection_method` (String) Either `charge_automatically`, or `send_invoice`. When charging automatically, Stripe will attempt to pay this invoice using the default source attached to the customer. When sending an invoice, Stripe will email this invoice to the customer with payment instructions. Defaults to `charge_automatically`.
 - `currency` (String) The currency to create this invoice in. Defaults to that of `customer` if not specified.
 - `custom_fields` (Block List) A list of up to 4 custom fields to be displayed on the invoice. (see [below for nested schema](#nestedblock--custom_fields))
@@ -28,55 +28,349 @@ description: |-
 - `days_until_due` (Number) The number of days from when the invoice is created until it is due. Valid only for invoices where `collection_method=send_invoice`.
 - `default_payment_method` (String) ID of the default payment method for the invoice. It must belong to the customer associated with the invoice. If not set, defaults to the subscription's default payment method, if any, or to the default payment method in the customer's invoice settings.
 - `default_source` (String) ID of the default payment source for the invoice. It must belong to the customer associated with the invoice and be in a chargeable state. If not set, defaults to the subscription's default source, if any, or to the customer's default source.
-- `default_tax_rates` (List of String) The tax rates that will apply to any line item that does not have `tax_rates` set.
 - `description` (String) An arbitrary string attached to the object. Often useful for displaying to users. Referenced as 'memo' in the Dashboard.
-- `discounts` (Block List) The coupons to redeem into discounts for the invoice. If not specified, inherits the discount from the invoice's customer. Pass an empty string to avoid inheriting any discounts. (see [below for nested schema](#nestedblock--discounts))
+- `discounts` (List of String) The coupons to redeem into discounts for the invoice. If not specified, inherits the discount from the invoice's customer. Pass an empty string to avoid inheriting any discounts.
 - `due_date` (Number) The date on which payment for this invoice is due. Valid only for invoices where `collection_method=send_invoice`.
 - `footer` (String) Footer to be displayed on the invoice.
-- `from_invoice_action` (String)
-- `from_invoice_invoice` (String)
+- `from_invoice_action` (String) The relation between this invoice and the cloned invoice
+- `from_invoice_invoice` (String) The invoice that was cloned.
 - `on_behalf_of` (String) The account (if any) for which the funds of the invoice payment are intended. If set, the invoice will be presented with the branding and support information of the specified account. See the [Invoices with Connect](https://stripe.com/docs/billing/invoices/connect) documentation for details.
-- `payment_settings_default_mandate` (String)
-- `payment_settings_payment_method_options_payment_method_options_acss_debit_payment_method_options_acss_debit_acss_debit_mandate_options_payment_method_options_acss_debit_acss_debit_mandate_options_acss_debit_mandate_options_mandate_options_transaction_type` (String)
-- `payment_settings_payment_method_options_payment_method_options_acss_debit_payment_method_options_acss_debit_acss_debit_verification_method` (String)
-- `payment_settings_payment_method_options_payment_method_options_bancontact_payment_method_options_bancontact_bancontact_preferred_language` (String)
-- `payment_settings_payment_method_options_payment_method_options_card_payment_method_options_card_card_installments_payment_method_options_card_card_installments_card_installments_installments_enabled` (Boolean)
-- `payment_settings_payment_method_options_payment_method_options_card_payment_method_options_card_card_installments_payment_method_options_card_card_installments_card_installments_installments_plan_payment_method_options_card_card_installments_card_installments_installments_plan_card_installments_installments_plan_installments_plan_plan_count` (Number)
-- `payment_settings_payment_method_options_payment_method_options_card_payment_method_options_card_card_installments_payment_method_options_card_card_installments_card_installments_installments_plan_payment_method_options_card_card_installments_card_installments_installments_plan_card_installments_installments_plan_installments_plan_plan_interval` (String)
-- `payment_settings_payment_method_options_payment_method_options_card_payment_method_options_card_card_installments_payment_method_options_card_card_installments_card_installments_installments_plan_payment_method_options_card_card_installments_card_installments_installments_plan_card_installments_installments_plan_installments_plan_plan_type` (String)
-- `payment_settings_payment_method_options_payment_method_options_card_payment_method_options_card_card_request_three_d_secure` (String)
-- `payment_settings_payment_method_options_payment_method_options_customer_balance_payment_method_options_customer_balance_customer_balance_bank_transfer_payment_method_options_customer_balance_customer_balance_bank_transfer_customer_balance_bank_transfer_bank_transfer_eu_bank_transfer_payment_method_options_customer_balance_customer_balance_bank_transfer_customer_balance_bank_transfer_bank_transfer_eu_bank_transfer_customer_balance_bank_transfer_bank_transfer_eu_bank_transfer_bank_transfer_eu_bank_transfer_eu_bank_transfer_country` (String)
-- `payment_settings_payment_method_options_payment_method_options_customer_balance_payment_method_options_customer_balance_customer_balance_bank_transfer_payment_method_options_customer_balance_customer_balance_bank_transfer_customer_balance_bank_transfer_bank_transfer_type` (String)
-- `payment_settings_payment_method_options_payment_method_options_customer_balance_payment_method_options_customer_balance_customer_balance_funding_type` (String)
-- `payment_settings_payment_method_options_payment_method_options_us_bank_account_payment_method_options_us_bank_account_us_bank_account_financial_connections_payment_method_options_us_bank_account_us_bank_account_financial_connections_us_bank_account_financial_connections_financial_connections_permissions` (List of String)
-- `payment_settings_payment_method_options_payment_method_options_us_bank_account_payment_method_options_us_bank_account_us_bank_account_verification_method` (String)
-- `payment_settings_payment_method_types` (List of String)
+- `payment_settings_default_mandate` (String) ID of the mandate to be used for this invoice. It must correspond to the payment method used to pay the invoice, including the invoice's default_payment_method or default_source, if set.
+- `payment_settings_payment_method_options_acss_debit_mandate_options_transaction_type` (String) Transaction type of the mandate.
+- `payment_settings_payment_method_options_acss_debit_verification_method` (String) Bank account verification method.
+- `payment_settings_payment_method_options_bancontact_preferred_language` (String) Preferred language of the Bancontact authorization page that the customer is redirected to.
+- `payment_settings_payment_method_options_card_installments_enabled` (Boolean) Whether Installments are enabled for this Invoice.
+- `payment_settings_payment_method_options_card_installments_plan_count` (Number)
+- `payment_settings_payment_method_options_card_installments_plan_interval` (String)
+- `payment_settings_payment_method_options_card_installments_plan_type` (String)
+- `payment_settings_payment_method_options_card_request_three_d_secure` (String) We strongly recommend that you rely on our SCA Engine to automatically prompt your customers for authentication based on risk level and [other requirements](https://stripe.com/docs/strong-customer-authentication). However, if you wish to request 3D Secure based on logic from your own fraud engine, provide this option. Read our guide on [manually requesting 3D Secure](https://stripe.com/docs/payments/3d-secure#manual-three-ds) for more information on how this configuration interacts with Radar and our SCA Engine.
+- `payment_settings_payment_method_options_customer_balance_bank_transfer_eu_bank_transfer_country` (String) The desired country code of the bank account information. Permitted values include: `DE`, `ES`, `FR`, `IE`, or `NL`.
+- `payment_settings_payment_method_options_customer_balance_bank_transfer_type` (String) The bank transfer type that can be used for funding. Permitted values include: `eu_bank_transfer`, `gb_bank_transfer`, `jp_bank_transfer`, or `mx_bank_transfer`.
+- `payment_settings_payment_method_options_customer_balance_funding_type` (String) The funding method type to be used when there are not enough funds in the customer balance. Permitted values include: `bank_transfer`.
+- `payment_settings_payment_method_options_us_bank_account_financial_connections_permissions` (List of String) The list of permissions to request. The `payment_method` permission must be included.
+- `payment_settings_payment_method_options_us_bank_account_verification_method` (String) Bank account verification method.
+- `payment_settings_payment_method_types` (List of String) The list of payment method types (e.g. card) to provide to the invoice’s PaymentIntent. If not set, Stripe attempts to automatically determine the types to use by looking at the invoice’s default payment method, the subscription’s default payment method, the customer’s default payment method, and your [invoice template settings](https://dashboard.stripe.com/settings/billing/invoice).
 - `pending_invoice_items_behavior` (String) How to handle pending invoice items on invoice creation. One of `include` or `exclude`. `include` will include any pending invoice items, and will create an empty draft invoice if no pending invoice items exist. `exclude` will always create an empty invoice draft regardless if there are pending invoice items or not. Defaults to `exclude` if the parameter is omitted.
-- `rendering_options_amount_tax_display` (String)
+- `rendering_options_amount_tax_display` (String) How line-item prices and amounts will be displayed with respect to tax on invoice PDFs.
 - `statement_descriptor` (String) Extra information about a charge for the customer's credit card statement. It must contain at least one letter. If not specified and this invoice is part of a subscription, the default `statement_descriptor` will be set to the first subscription item's product's `statement_descriptor`.
 - `subscription` (String) The ID of the subscription to invoice, if any. If set, the created invoice will only include pending invoice items for that subscription and pending invoice items not associated with any subscription if `pending_invoice_items_behavior` is `include`. The subscription's billing cycle and regular subscription events won't be affected.
-- `transfer_data_amount` (Number)
-- `transfer_data_destination` (String)
+- `transfer_data_amount` (Number) The amount in %s that will be transferred to the destination account when the invoice is paid. By default, the entire amount is transferred to the destination.
+- `transfer_data_destination` (String) The account where funds from the payment will be transferred to upon payment success.
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `account_country` (String) The country of the business associated with this invoice, most often the business creating the invoice.
+- `account_name` (String) The public name of the business associated with this invoice, most often the business creating the invoice.
+- `amount_due` (Number) Final amount due at this time for this invoice. If the invoice's total is smaller than the minimum charge amount, for example, or if there is account credit that can be applied to the invoice, the `amount_due` may be 0. If there is a positive `starting_balance` for the invoice (the customer owes money), the `amount_due` will also take that into account. The charge that gets generated for the invoice will be for the amount specified in `amount_due`.
+- `amount_paid` (Number) The amount, in %s, that was paid.
+- `amount_remaining` (Number) The difference between amount_due and amount_paid, in %s.
+- `application` (String) ID of the Connect Application that created the invoice.
+- `attempt_count` (Number) Number of payment attempts made for this invoice, from the perspective of the payment retry schedule. Any payment attempt counts as the first attempt, and subsequently only automatic retries increment the attempt count. In other words, manual payment attempts after the first attempt do not affect the retry schedule.
+- `attempted` (Boolean) Whether an attempt has been made to pay the invoice. An invoice is not attempted until 1 hour after the `invoice.created` webhook, for example, so you might not want to display that invoice as unpaid to your users.
+- `automatic_tax_status` (String) The status of the most recent automated tax calculation for this invoice.
+- `billing_reason` (String) Indicates the reason why the invoice was created. `subscription_cycle` indicates an invoice created by a subscription advancing into a new period. `subscription_create` indicates an invoice created due to creating a subscription. `subscription_update` indicates an invoice created due to updating a subscription. `subscription` is set for all old invoices to indicate either a change to a subscription or a period advancement. `manual` is set for all invoices unrelated to a subscription (for example: created via the invoice editor). The `upcoming` value is reserved for simulated invoices per the upcoming invoice endpoint. `subscription_threshold` indicates an invoice created due to a billing threshold being reached.
+- `charge` (String) ID of the latest charge generated for this invoice, if any.
+- `created` (Number) Time at which the object was created. Measured in seconds since the Unix epoch.
+- `customer_address_city` (String) City, district, suburb, town, or village.
+- `customer_address_country` (String) Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
+- `customer_address_line1` (String) Address line 1 (e.g., street, PO Box, or company name).
+- `customer_address_line2` (String) Address line 2 (e.g., apartment, suite, unit, or building).
+- `customer_address_postal_code` (String) ZIP or postal code.
+- `customer_address_state` (String) State, county, province, or region.
+- `customer_email` (String) The customer's email. Until the invoice is finalized, this field will equal `customer.email`. Once the invoice is finalized, this field will no longer be updated.
+- `customer_name` (String) The customer's name. Until the invoice is finalized, this field will equal `customer.name`. Once the invoice is finalized, this field will no longer be updated.
+- `customer_phone` (String) The customer's phone number. Until the invoice is finalized, this field will equal `customer.phone`. Once the invoice is finalized, this field will no longer be updated.
+- `customer_shipping_address_city` (String) City, district, suburb, town, or village.
+- `customer_shipping_address_country` (String) Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
+- `customer_shipping_address_line1` (String) Address line 1 (e.g., street, PO Box, or company name).
+- `customer_shipping_address_line2` (String) Address line 2 (e.g., apartment, suite, unit, or building).
+- `customer_shipping_address_postal_code` (String) ZIP or postal code.
+- `customer_shipping_address_state` (String) State, county, province, or region.
+- `customer_shipping_carrier` (String) The delivery service that shipped a physical product, such as Fedex, UPS, USPS, etc.
+- `customer_shipping_name` (String) Recipient name.
+- `customer_shipping_phone` (String) Recipient phone (including extension).
+- `customer_shipping_tracking_number` (String) The tracking number for a physical product, obtained from the delivery service. If multiple tracking numbers were generated for this purchase, please separate them with commas.
+- `customer_tax_exempt` (String) The customer's tax exempt status. Until the invoice is finalized, this field will equal `customer.tax_exempt`. Once the invoice is finalized, this field will no longer be updated.
+- `customer_tax_ids` (List of Object) The customer's tax IDs. Until the invoice is finalized, this field will contain the same tax IDs as `customer.tax_ids`. Once the invoice is finalized, this field will no longer be updated. (see [below for nested schema](#nestedatt--customer_tax_ids))
+- `default_tax_rates` (Block List) The tax rates that will apply to any line item that does not have `tax_rates` set. (see [below for nested schema](#nestedblock--default_tax_rates))
+- `discount_checkout_session` (String) The Checkout session that this coupon is applied to, if it is applied to a particular session in payment mode. Will not be present for subscription mode.
+- `discount_coupon_amount_off` (Number) Amount (in the `currency` specified) that will be taken off the subtotal of any invoices for this customer.
+- `discount_coupon_applies_to_products` (List of String) A list of product IDs this coupon applies to
+- `discount_coupon_created` (Number) Time at which the object was created. Measured in seconds since the Unix epoch.
+- `discount_coupon_currency` (String) If `amount_off` has been set, the three-letter [ISO code for the currency](https://stripe.com/docs/currencies) of the amount to take off.
+- `discount_coupon_currency_options` (List of Object) Coupons defined in each available currency option. Each key must be a three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html) and a [supported currency](https://stripe.com/docs/currencies). (see [below for nested schema](#nestedatt--discount_coupon_currency_options))
+- `discount_coupon_duration` (String) One of `forever`, `once`, and `repeating`. Describes how long a customer who applies this coupon will get the discount.
+- `discount_coupon_duration_in_months` (Number) If `duration` is `repeating`, the number of months the coupon applies. Null if coupon `duration` is `forever` or `once`.
+- `discount_coupon_id` (String) Unique identifier for the object.
+- `discount_coupon_livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
+- `discount_coupon_max_redemptions` (Number) Maximum number of times this coupon can be redeemed, in total, across all customers, before it is no longer valid.
+- `discount_coupon_metadata` (Map of String) Set of [key-value pairs](https://stripe.com/docs/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format.
+- `discount_coupon_name` (String) Name of the coupon displayed to customers on for instance invoices or receipts.
+- `discount_coupon_object` (String) String representing the object's type. Objects of the same type share the same value.
+- `discount_coupon_percent_off` (Number) Percent that will be taken off the subtotal of any invoices for this customer for the duration of the coupon. For example, a coupon with percent_off of 50 will make a %s100 invoice %s50 instead.
+- `discount_coupon_redeem_by` (Number) Date after which the coupon can no longer be redeemed.
+- `discount_coupon_times_redeemed` (Number) Number of times this coupon has been applied to a customer.
+- `discount_coupon_valid` (Boolean) Taking account of the above properties, whether this coupon can still be applied to a customer.
+- `discount_customer` (String) The ID of the customer associated with this discount.
+- `discount_end` (Number) If the coupon has a duration of `repeating`, the date that this discount will end. If the coupon has a duration of `once` or `forever`, this attribute will be null.
+- `discount_id` (String) The ID of the discount object. Discounts cannot be fetched by ID. Use `expand[]=discounts` in API calls to expand discount IDs in an array.
+- `discount_invoice` (String) The invoice that the discount's coupon was applied to, if it was applied directly to a particular invoice.
+- `discount_invoice_item` (String) The invoice item `id` (or invoice line item `id` for invoice line items of type='subscription') that the discount's coupon was applied to, if it was applied directly to a particular invoice item or invoice line item.
+- `discount_object` (String) String representing the object's type. Objects of the same type share the same value.
+- `discount_promotion_code` (String) The promotion code applied to create this discount.
+- `discount_start` (Number) Date that the coupon was applied.
+- `discount_subscription` (String) The subscription that this coupon is applied to, if it is applied to a particular subscription.
+- `ending_balance` (Number) Ending customer balance after the invoice is finalized. Invoices are finalized approximately an hour after successful webhook delivery or when payment collection is attempted for the invoice. If the invoice has not been finalized yet, this will be null.
+- `hosted_invoice_url` (String) The URL for the hosted invoice page, which allows customers to view and pay an invoice. If the invoice has not been finalized yet, this will be null.
+- `id` (String) Unique identifier for the object. This property is always present unless the invoice is an upcoming invoice. See [Retrieve an upcoming invoice](https://stripe.com/docs/api/invoices/upcoming) for more details.
+- `invoice_pdf` (String) The link to download the PDF for the invoice. If the invoice has not been finalized yet, this will be null.
+- `latest_revision` (String) The ID of the most recent non-draft revision of this invoice
+- `lines_data` (List of Object) Details about each object. (see [below for nested schema](#nestedatt--lines_data))
+- `lines_has_more` (Boolean) True if this list has another page of items after this one that can be fetched.
+- `lines_object` (String) String representing the object's type. Objects of the same type share the same value. Always has the value `list`.
+- `lines_url` (String) The URL where this list can be accessed.
+- `livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
+- `next_payment_attempt` (Number) The time at which payment will next be attempted. This value will be `null` for invoices where `collection_method=send_invoice`.
+- `number` (String) A unique, identifying string that appears on emails sent to the customer for this invoice. This starts with the customer's unique invoice_prefix if it is specified.
+- `object` (String) String representing the object's type. Objects of the same type share the same value.
+- `paid` (Boolean) Whether payment was successfully collected for this invoice. An invoice can be paid (most commonly) with a charge or with credit from the customer's account balance.
+- `paid_out_of_band` (Boolean) Returns true if the invoice was manually marked paid, returns false if the invoice hasn't been paid yet or was paid on Stripe.
+- `payment_intent` (String) The PaymentIntent associated with this invoice. The PaymentIntent is generated when the invoice is finalized, and can then be used to pay the invoice. Note that voiding an invoice will cancel the PaymentIntent.
+- `period_end` (Number) End of the usage period during which invoice items were added to this invoice.
+- `period_start` (Number) Start of the usage period during which invoice items were added to this invoice.
+- `post_payment_credit_notes_amount` (Number) Total amount of all post-payment credit notes issued for this invoice.
+- `pre_payment_credit_notes_amount` (Number) Total amount of all pre-payment credit notes issued for this invoice.
+- `quote` (String) The quote this invoice was generated from.
+- `receipt_number` (String) This is the transaction number that appears on email receipts sent for this invoice.
+- `starting_balance` (Number) Starting customer balance before the invoice is finalized. If the invoice has not been finalized yet, this will be the current customer balance. For revision invoices, this also includes any customer balance that was applied to the original invoice.
+- `status` (String) The status of the invoice, one of `draft`, `open`, `paid`, `uncollectible`, or `void`. [Learn more](https://stripe.com/docs/billing/invoices/workflow#workflow-overview)
+- `status_transitions_finalized_at` (Number) The time that the invoice draft was finalized.
+- `status_transitions_marked_uncollectible_at` (Number) The time that the invoice was marked uncollectible.
+- `status_transitions_paid_at` (Number) The time that the invoice was paid.
+- `status_transitions_voided_at` (Number) The time that the invoice was voided.
+- `subscription_proration_date` (Number) Only set for upcoming invoices that preview prorations. The time used to calculate prorations.
+- `subtotal` (Number) Total of all subscriptions, invoice items, and prorations on the invoice before any invoice level discount or exclusive tax is applied. Item discounts are already incorporated
+- `subtotal_excluding_tax` (Number) The integer amount in %s representing the subtotal of the invoice before any invoice level discount or tax is applied. Item discounts are already incorporated
+- `tax` (Number) The amount of tax on this invoice. This is the sum of all the tax amounts on this invoice.
+- `test_clock` (String) ID of the test clock this invoice belongs to.
+- `threshold_reason_amount_gte` (Number) The total invoice amount threshold boundary if it triggered the threshold invoice.
+- `threshold_reason_item_reasons` (List of Object) Indicates which line items triggered a threshold invoice. (see [below for nested schema](#nestedatt--threshold_reason_item_reasons))
+- `total` (Number) Total after discounts and taxes.
+- `total_discount_amounts` (List of Object) The aggregate amounts calculated per discount across all line items. (see [below for nested schema](#nestedatt--total_discount_amounts))
+- `total_excluding_tax` (Number) The integer amount in %s representing the total amount of the invoice including all discounts but excluding all tax.
+- `total_tax_amounts` (List of Object) The aggregate amounts calculated per tax rate for all line items. (see [below for nested schema](#nestedatt--total_tax_amounts))
+- `webhooks_delivered_at` (Number) Invoices are automatically paid or sent 1 hour after webhooks are delivered, or until all webhook delivery attempts have [been exhausted](https://stripe.com/docs/billing/webhooks#understand). This field tracks the time when webhooks for this invoice were successfully delivered. If the invoice had no webhooks to deliver, this will be set while the invoice is being created.
 
 <a id="nestedblock--custom_fields"></a>
 ### Nested Schema for `custom_fields`
 
 Required:
 
-- `name` (String)
+- `name` (String) The name of the custom field.
+- `value` (String) The value of the custom field.
+
+
+<a id="nestedatt--customer_tax_ids"></a>
+### Nested Schema for `customer_tax_ids`
+
+Read-Only:
+
+- `type` (String)
 - `value` (String)
 
 
-<a id="nestedblock--discounts"></a>
-### Nested Schema for `discounts`
+<a id="nestedblock--default_tax_rates"></a>
+### Nested Schema for `default_tax_rates`
 
-Optional:
+Read-Only:
 
-- `coupon` (String)
+- `active` (Boolean) Defaults to `true`. When set to `false`, this tax rate cannot be used with new applications or Checkout Sessions, but will still work for subscriptions and invoices that already have it set.
+- `country` (String) Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
+- `created` (Number) Time at which the object was created. Measured in seconds since the Unix epoch.
+- `description` (String) An arbitrary string attached to the tax rate for your internal use only. It will not be visible to your customers.
+- `display_name` (String) The display name of the tax rates as it will appear to your customer on their receipt email, PDF, and the hosted invoice page.
+- `id` (String) Unique identifier for the object.
+- `inclusive` (Boolean) This specifies if the tax rate is inclusive or exclusive.
+- `jurisdiction` (String) The jurisdiction for the tax rate. You can use this label field for tax reporting purposes. It also appears on your customer’s invoice.
+- `livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
+- `metadata` (Map of String) Set of [key-value pairs](https://stripe.com/docs/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format.
+- `object` (String) String representing the object's type. Objects of the same type share the same value.
+- `percentage` (Number) This represents the tax rate percent out of 100.
+- `state` (String) [ISO 3166-2 subdivision code](https://en.wikipedia.org/wiki/ISO_3166-2:US), without country prefix. For example, "NY" for New York, United States.
+- `tax_type` (String) The high-level tax type, such as `vat` or `sales_tax`.
+
+
+<a id="nestedatt--discount_coupon_currency_options"></a>
+### Nested Schema for `discount_coupon_currency_options`
+
+Read-Only:
+
+- `amount_off` (Number)
+- `key` (String)
+
+
+<a id="nestedatt--lines_data"></a>
+### Nested Schema for `lines_data`
+
+Read-Only:
+
+- `amount` (Number)
+- `amount_excluding_tax` (Number)
+- `currency` (String)
+- `description` (String)
+- `discount_amounts` (List of Object) (see [below for nested schema](#nestedobjatt--lines_data--discount_amounts))
+- `discountable` (Boolean)
+- `discounts` (List of String)
+- `id` (String)
+- `invoice_item` (String)
+- `livemode` (Boolean)
+- `metadata` (Map of String)
+- `object` (String)
+- `period_end` (Number)
+- `period_start` (Number)
+- `price_active` (Boolean)
+- `price_billing_scheme` (String)
+- `price_created` (Number)
+- `price_currency` (String)
+- `price_currency_options` (List of Object) (see [below for nested schema](#nestedobjatt--lines_data--price_currency_options))
+- `price_custom_unit_amount_maximum` (Number)
+- `price_custom_unit_amount_minimum` (Number)
+- `price_custom_unit_amount_preset` (Number)
+- `price_id` (String)
+- `price_livemode` (Boolean)
+- `price_lookup_key` (String)
+- `price_metadata` (Map of String)
+- `price_nickname` (String)
+- `price_object` (String)
+- `price_product` (String)
+- `price_recurring_aggregate_usage` (String)
+- `price_recurring_interval` (String)
+- `price_recurring_interval_count` (Number)
+- `price_recurring_usage_type` (String)
+- `price_tax_behavior` (String)
+- `price_tiers` (List of Object) (see [below for nested schema](#nestedobjatt--lines_data--price_tiers))
+- `price_tiers_mode` (String)
+- `price_transform_quantity_divide_by` (Number)
+- `price_transform_quantity_round` (String)
+- `price_type` (String)
+- `price_unit_amount` (Number)
+- `price_unit_amount_decimal` (String)
+- `proration` (Boolean)
+- `proration_details_credited_items_invoice` (String)
+- `proration_details_credited_items_invoice_line_items` (List of String)
+- `quantity` (Number)
+- `subscription` (String)
+- `subscription_item` (String)
+- `tax_amounts` (List of Object) (see [below for nested schema](#nestedobjatt--lines_data--tax_amounts))
+- `tax_rates` (List of Object) (see [below for nested schema](#nestedobjatt--lines_data--tax_rates))
+- `type` (String)
+- `unit_amount_excluding_tax` (String)
+
+<a id="nestedobjatt--lines_data--discount_amounts"></a>
+### Nested Schema for `lines_data.discount_amounts`
+
+Read-Only:
+
+- `amount` (Number)
 - `discount` (String)
+
+
+<a id="nestedobjatt--lines_data--price_currency_options"></a>
+### Nested Schema for `lines_data.price_currency_options`
+
+Read-Only:
+
+- `custom_unit_amount_maximum` (Number)
+- `custom_unit_amount_minimum` (Number)
+- `custom_unit_amount_preset` (Number)
+- `key` (String)
+- `tax_behavior` (String)
+- `tiers` (List of Object) (see [below for nested schema](#nestedobjatt--lines_data--price_currency_options--tiers))
+- `unit_amount` (Number)
+- `unit_amount_decimal` (String)
+
+<a id="nestedobjatt--lines_data--price_currency_options--tiers"></a>
+### Nested Schema for `lines_data.price_currency_options.tiers`
+
+Read-Only:
+
+- `flat_amount` (Number)
+- `flat_amount_decimal` (String)
+- `unit_amount` (Number)
+- `unit_amount_decimal` (String)
+- `up_to` (Number)
+
+
+
+<a id="nestedobjatt--lines_data--price_tiers"></a>
+### Nested Schema for `lines_data.price_tiers`
+
+Read-Only:
+
+- `flat_amount` (Number)
+- `flat_amount_decimal` (String)
+- `unit_amount` (Number)
+- `unit_amount_decimal` (String)
+- `up_to` (Number)
+
+
+<a id="nestedobjatt--lines_data--tax_amounts"></a>
+### Nested Schema for `lines_data.tax_amounts`
+
+Read-Only:
+
+- `amount` (Number)
+- `inclusive` (Boolean)
+- `tax_rate` (String)
+
+
+<a id="nestedobjatt--lines_data--tax_rates"></a>
+### Nested Schema for `lines_data.tax_rates`
+
+Read-Only:
+
+- `active` (Boolean)
+- `country` (String)
+- `created` (Number)
+- `description` (String)
+- `display_name` (String)
+- `id` (String)
+- `inclusive` (Boolean)
+- `jurisdiction` (String)
+- `livemode` (Boolean)
+- `metadata` (Map of String)
+- `object` (String)
+- `percentage` (Number)
+- `state` (String)
+- `tax_type` (String)
+
+
+
+<a id="nestedatt--threshold_reason_item_reasons"></a>
+### Nested Schema for `threshold_reason_item_reasons`
+
+Read-Only:
+
+- `line_item_ids` (List of String)
+- `usage_gte` (Number)
+
+
+<a id="nestedatt--total_discount_amounts"></a>
+### Nested Schema for `total_discount_amounts`
+
+Read-Only:
+
+- `amount` (Number)
+- `discount` (String)
+
+
+<a id="nestedatt--total_tax_amounts"></a>
+### Nested Schema for `total_tax_amounts`
+
+Read-Only:
+
+- `amount` (Number)
+- `inclusive` (Boolean)
+- `tax_rate` (String)
 
 

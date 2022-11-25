@@ -19,6 +19,6 @@ func (n *NodeFloat) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 	return []jen.Code{tfDest.Set(apiSource)}
 }
 
-func (n *NodeFloat) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) jen.Code {
-	return tfSource
+func (n *NodeFloat) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code {
+	return tfSource.Get()
 }

@@ -12,6 +12,19 @@ import (
 	"github.com/dave/jennifer/jen"
 )
 
+func DeepCopy[T any](x T) T {
+	a, err := json.Marshal(x)
+	if err != nil {
+		panic(err)
+	}
+	x = shared.Default[T]()
+	err = json.Unmarshal(a, &x)
+	if err != nil {
+		panic(err)
+	}
+	return x
+}
+
 func Last[T any](x []T) T {
 	return x[len(x)-1]
 }
@@ -26,6 +39,23 @@ func DigOpt[T any](bla any, field string) *T {
 		panic("dug value not convertible")
 	}
 	return &v1
+}
+
+func IndOpt[T any](bla []T, i int) T {
+	if i >= len(bla) {
+		return shared.Default[T]()
+	}
+	return bla[i]
+}
+
+func Bury(bla any, field string, data string) {
+	m := bla.(map[string]any)
+	old := m[field]
+	if data != "" && old != "" {
+		m[field] = fmt.Sprintf("%s %s", data, old)
+	} else {
+		m[field] = data
+	}
 }
 
 func Map[T any, G any](x []T, m func(v T) G) []G {
@@ -128,6 +158,7 @@ type OpenApiArray struct {
 }
 
 type OpenApiObj struct {
+	Type                 string         `json:"type"`
 	Description          string         `json:"description"`
 	AdditionalProperties any            `json:"additionalProperties"`
 	Properties           map[string]any `json:"properties"`
@@ -158,56 +189,6 @@ func CondAddDiagErr(exit bool, path jen.Code, t string, messageArgs ...jen.Code)
 	return jen.If(jen.Id("err").Op("!=").Nil()).Block(statements...)
 }
 
-type TfDestColl interface {
-	Field(key string) TfDestVal
-}
-
-type MapTfDestColl string
-
-func (d *MapTfDestColl) Field(key string) TfDestVal {
-	return &MapTfDestVal{
-		Base: string(*d),
-		Key:  jen.Lit(key),
-	}
-}
-
-type RootTfDestColl string
-
-func (d *RootTfDestColl) Field(key string) TfDestVal {
-	return &RootTfDestVal{
-		Base: string(*d),
-		Key:  key,
-	}
-}
-
-type TfDestVal interface {
-	Set(value jen.Code) jen.Code
-}
-
-type RootTfDestVal struct {
-	Base string
-	Key  string
-}
-
-func (d *RootTfDestVal) Set(value jen.Code) jen.Code {
-	return jen.Id(d.Base).Dot("Set").Call(jen.Lit(d.Key), value)
-}
-
-type MapTfDestVal struct {
-	Base string
-	Key  jen.Code
-}
-
-func (d *MapTfDestVal) Set(val jen.Code) jen.Code {
-	return jen.Id(d.Base).Index(d.Key).Op("=").Add(val)
-}
-
-type ArrayTfDestVal string
-
-func (d *ArrayTfDestVal) Set(val jen.Code) jen.Code {
-	return jen.Id(string(*d)).Op("=").Append(jen.Id(string(*d)), val)
-}
-
 type Node interface {
 	// Generate a partial field definition
 	GenField() jen.Dict
@@ -217,72 +198,222 @@ type Node interface {
 	ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code
 	// Expression that checks the raw (any) value in tfSource and returns the value in the shape the api expects.
 	// For objects, this means turning a flattened map into nested maps for nested object specs.
-	ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) jen.Code
+	ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code
 }
 
-func FlattenField(tfPrefix string, field *NodeObjField) {
-	field.TfKey = tfPrefix + field.TfKey
-	if objNode, isObjNode := field.Spec.(*NodeObj); isObjNode {
-		for _, subfield := range objNode.Fields {
-			FlattenField(field.TfKey+"_", subfield)
+func BuildNode(
+	seenRefs map[string]bool,
+	refs map[string]OpenApiObj,
+	createSpec any,
+	updateSpec any,
+	getSpec any,
+) *Node {
+	deref := func(s any) (any, string) {
+		if s == nil {
+			return nil, ""
+		}
+		ref := DigOpt[string](s, "$ref")
+		if ref == nil {
+			return s, ""
+		}
+		elemName := Last(strings.Split(*ref, "/"))
+		return Reunmarshal[any](refs[elemName]), elemName
+	}
+	filterAnyOf := func(anyOf []any) []any {
+		filtered := []any{}
+		for _, sub := range anyOf {
+			sub, _ := deref(sub)
+			type_ := shared.Dig[string](sub, "type")
+			switch type_ {
+			case "integer", "number", "boolean":
+				return []any{sub}
+			case "string":
+				enum := shared.Dig[[]any](sub, "enum")
+				if enum != nil && len(enum) == 1 && enum[0].(string) == "" {
+					continue
+				}
+				return []any{sub}
+			case "object":
+				// nop
+			case "array":
+				// nop
+			default:
+				panic("TODO")
+			}
+			filtered = append(filtered, sub)
+		}
+		return filtered
+	}
+
+	{
+		var ref_ = ""
+		if s, ref := deref(createSpec); ref != "" {
+			if seenRefs[ref] {
+				return nil
+			}
+			ref_ = ref
+			createSpec = s
+		}
+		if s, ref := deref(updateSpec); ref != "" {
+			if seenRefs[ref] {
+				return nil
+			}
+			ref_ = ref
+			updateSpec = s
+		}
+		if s, ref := deref(getSpec); ref != "" {
+			if seenRefs[ref] {
+				return nil
+			}
+			ref_ = ref
+			getSpec = s
+		}
+		if ref_ != "" {
+			seenRefs = DeepCopy(seenRefs)
+			seenRefs[ref_] = true
 		}
 	}
-}
-
-func BuildNode(refs map[string]OpenApiObj, spec any) *Node {
-	type_ := shared.Dig[string](spec, "type")
-	if type_ == "" {
-		anyOf := shared.Dig[[]any](spec, "anyOf")
-		if anyOf != nil {
-			filtered := []any{}
-			allObj := true
-			for _, sub := range anyOf {
-				type_ := shared.Dig[string](sub, "type")
-				switch type_ {
-				case "integer", "number", "boolean":
-					return BuildNode(refs, sub)
-				case "string":
-					enum := shared.Dig[[]any](sub, "enum")
-					if enum != nil {
-						if len(enum) == 1 && enum[0].(string) == "" {
-							continue
-						}
-					} else {
-						return BuildNode(refs, sub)
-					}
-					allObj = false
-				case "object":
-					// nop
-				case "array":
-					// nop
-				default:
-					panic("TODO")
-				}
-				filtered = append(filtered, sub)
+	deanyof := func(s any) any {
+		// get rid of weird mismatches where create is obj, get is anyof with 1 obj option
+		if s == nil {
+			return nil
+		}
+		anyof := shared.Dig[[]any](s, "anyOf")
+		anyof = filterAnyOf(anyof)
+		if len(anyof) == 1 {
+			return anyof[0]
+		}
+		return s
+	}
+	createSpec = deanyof(createSpec)
+	updateSpec = deanyof(updateSpec)
+	getSpec = deanyof(getSpec)
+	{
+		ref_ := ""
+		if s, ref := deref(createSpec); ref != "" {
+			if seenRefs[ref] {
+				return nil
 			}
-			if len(filtered) == 1 {
-				return BuildNode(refs, filtered[0])
+			ref_ = ref
+			createSpec = s
+		}
+		if s, ref := deref(updateSpec); ref != "" {
+			if seenRefs[ref] {
+				return nil
+			}
+			ref_ = ref
+			updateSpec = s
+		}
+		if s, ref := deref(getSpec); ref != "" {
+			if seenRefs[ref] {
+				return nil
+			}
+			ref_ = ref
+			getSpec = s
+		}
+		if ref_ != "" {
+			seenRefs = DeepCopy(seenRefs)
+			seenRefs[ref_] = true
+		}
+	}
+
+	desc := ""
+	if createSpec != nil {
+		desc = desc + shared.Dig[string](createSpec, "description")
+	}
+	if getSpec != nil {
+		desc = desc + shared.Dig[string](getSpec, "description")
+	}
+
+	var type_ = ""
+	if createSpec != nil {
+		type_ = shared.Dig[string](createSpec, "type")
+	}
+	var getType_ = ""
+	if getSpec != nil {
+		type_ = shared.Dig[string](getSpec, "type")
+		if type_ == "" {
+			type_ = getType_
+		}
+	}
+	if type_ != "" && getType_ != "" && type_ != getType_ {
+		// bad spec design
+		log.Printf("Node with mismatched types %s and %s, skipping", type_, getType_)
+		return nil
+	}
+	if type_ == "" {
+		m := func(s any) []any {
+			if s == nil {
+				return nil
+			}
+			return shared.Dig[[]any](s, "anyOf")
+		}
+		createAnyOf := filterAnyOf(m(createSpec))
+		updateAnyOf := filterAnyOf(m(updateSpec))
+		getAnyOf := filterAnyOf(m(getSpec))
+		if createAnyOf != nil || getAnyOf != nil {
+			type El struct {
+				Create any // not nil
+				Update any
+				Get    any
+			}
+			filtered := []El{}
+			allObj := true
+			if len(createAnyOf) > 0 {
+				for i, sub := range createAnyOf {
+					filtered = append(filtered, El{
+						Create: sub,
+						Update: IndOpt(updateAnyOf, i),
+						Get:    IndOpt(getAnyOf, i),
+					})
+				}
+			} else {
+				for i, sub := range getAnyOf {
+					filtered = append(filtered, El{
+						Create: nil,
+						Update: IndOpt(updateAnyOf, i),
+						Get:    sub,
+					})
+				}
+			}
+			if len(filtered) < 2 {
+				panic("ASSERTION")
 			}
 			if allObj {
+				options := []*NodeObj{}
+				for _, o := range filtered {
+					node := BuildNode(seenRefs, refs, o.Create, o.Update, o.Get)
+					if node == nil {
+						continue
+					}
+					objNode := (*node).(*NodeObj)
+					if !objNode.checkAnyReq() {
+						continue
+					}
+					options = append(options, objNode)
+				}
+				if len(options) == 1 {
+					return P[Node](options[0])
+				}
+				if len(options) == 0 {
+					log.Printf("AnyOf field with no viable options, skipping")
+					return nil
+				}
 				return P[Node](&NodeAnyOfObjs{
-					Options: Map(filtered, func(o any) *NodeObj {
-						return (*BuildNode(refs, o)).(*NodeObj)
-					}),
+					Options: options,
 				})
 			}
-			panic("TODO")
-		}
-	}
-	if type_ == "" {
-		ref := DigOpt[string](spec, "$ref")
-		if ref != nil {
-			elemName := Last(strings.Split(*ref, "/"))
-			return BuildNode(refs, refs[elemName])
+			panic("ASSERTION")
 		}
 	}
 	switch type_ {
 	case "string":
-		spec := Reunmarshal[OpenApiString](spec)
+		var spec OpenApiString
+		if createSpec != nil {
+			spec = Reunmarshal[OpenApiString](createSpec)
+		} else {
+			spec = Reunmarshal[OpenApiString](getSpec)
+		}
 		enum := spec.Enum
 		return P[Node](&NodeString{
 			Enum: enum,
@@ -294,50 +425,127 @@ func BuildNode(refs map[string]OpenApiObj, spec any) *Node {
 	case "number":
 		return P[Node](&NodeFloat{})
 	case "object":
-		spec := Reunmarshal[OpenApiObj](spec)
-		if len(spec.Properties) > 0 {
-			required := map[string]bool{}
-			for _, paramName := range spec.Required {
-				required[paramName] = true
+		m := func(s any) *OpenApiObj {
+			if s == nil {
+				return nil
 			}
+			return P(Reunmarshal[OpenApiObj](s))
+		}
+		createSpec := m(createSpec)
+		updateSpec := m(updateSpec)
+		getSpec := m(getSpec)
+		m1 := func(s *OpenApiObj) map[string]any {
+			if s == nil {
+				return nil
+			}
+			return s.Properties
+		}
+		updateFields := m1(updateSpec)
+		getFields := m1(getSpec)
+		if (createSpec != nil && len(createSpec.Properties) > 0) || len(getFields) > 0 {
 			fields := []*NodeObjField{}
-			for propName, prop := range spec.Properties {
-				propNode := BuildNode(refs, prop)
+			fieldsByKey := map[string]*NodeObjField{}
+			if createSpec != nil {
+				createRequired := map[string]bool{}
+				for _, paramName := range createSpec.Required {
+					createRequired[paramName] = true
+				}
+				for propName, prop := range createSpec.Properties {
+					propNode := BuildNode(seenRefs, refs, prop, updateFields[propName], getFields[propName])
+					if propNode == nil {
+						continue
+					}
+					field := &NodeObjField{
+						Description: shared.Dig[string](prop, "description"),
+						Key:         propName,
+						Computed:    false,
+						Required:    createRequired[propName],
+						Updatable:   shared.InMap(propName, updateFields),
+						Readable:    shared.InMap(propName, getFields),
+						Spec:        *propNode,
+					}
+					fields = append(fields, field)
+					fieldsByKey[propName] = field
+				}
+			}
+
+			for propName, prop := range getFields {
+				desc := shared.Dig[string](prop, "description")
+				if createField, has := fieldsByKey[propName]; has {
+					if createField.Description == "" {
+						createField.Description = desc
+					}
+					continue
+				}
+				propNode := BuildNode(seenRefs, refs, nil, updateFields[propName], getFields[propName])
 				if propNode == nil {
 					continue
 				}
 				field := &NodeObjField{
-					Description: shared.Dig[string](prop, "description"),
-					ApiKey:      propName,
-					TfKey:       propName,
-					Required:    required[propName],
+					Description: desc,
+					Key:         propName,
+					Computed:    true,
+					Required:    false,
+					Updatable:   false,
+					Readable:    true,
 					Spec:        *propNode,
 				}
-				FlattenField("", field)
 				fields = append(fields, field)
 			}
+
+			if len(fields) == 0 {
+				// Some crazy empty objects in the api...
+				log.Printf("Object field with no viable fields, skipping")
+				return nil
+			}
+
 			return P[Node](&NodeObj{
 				Fields: fields,
 			})
-		} else if spec.AdditionalProperties != nil {
-			elem := *BuildNode(refs, spec.AdditionalProperties)
-			if objElem, isObj := elem.(*NodeObj); isObj {
+		} else if (createSpec != nil && createSpec.AdditionalProperties != nil) || (getSpec != nil && getSpec.AdditionalProperties != nil) {
+			m := func(s *OpenApiObj) any {
+				if s == nil {
+					return nil
+				}
+				return s.AdditionalProperties
+			}
+			elem := BuildNode(
+				seenRefs,
+				refs,
+				m(createSpec),
+				m(updateSpec),
+				m(getSpec),
+			)
+			if elem == nil {
+				return nil
+			}
+			if objElem, isObj := (*elem).(*NodeObj); isObj {
 				objElem.FakeMapField = true
 				return P[Node](&NodeFakeMap{
-					Elem: elem,
+					Elem: *elem,
 				})
 			} else {
 				return P[Node](&NodeMap{
-					Elem: elem,
+					Elem: *elem,
 				})
 			}
 		} else {
+			log.Printf("Object missing properties or additionalProperties, skipping")
 			return nil
 		}
 	case "array":
-		spec := Reunmarshal[OpenApiArray](spec)
+		m := func(s any) any {
+			if s == nil {
+				return nil
+			}
+			return Reunmarshal[OpenApiArray](s).Items
+		}
+		elem := BuildNode(seenRefs, refs, m(createSpec), m(updateSpec), m(getSpec))
+		if elem == nil {
+			return nil
+		}
 		return P[Node](&NodeArray{
-			Elem: *BuildNode(refs, spec.Items),
+			Elem: *elem,
 		})
 	default:
 		panic(fmt.Sprintf("Unhandled schema param type [[%s]]", type_))
@@ -388,37 +596,25 @@ func main() {
 	jenResources := jen.Dict{}
 	for path, methods := range spec.Paths {
 		if strings.Contains(path, "{") {
-			log.Printf("Skipping %s, parameterized = no collection", path)
+			//log.Printf("Skipping %s, parameterized = no collection", path)
 			continue
 		}
 		post, hasPost := methods["post"]
 		if !hasPost {
-			log.Printf("Skipping %s, no post method", path)
+			//log.Printf("Skipping %s, no post method", path)
 			continue
 		}
 		objName := Last(strings.Split(post.Responses.R200.Content.Json.Schema.Ref, "/"))
-		idField := ""
-		for propName := range spec.Components.Schemas[objName].Properties {
-			if propName == "id" {
-				idField = propName
-				break
+		objSpec := spec.Components.Schemas[objName]
+
+		var update any
+		{
+			updateRaw, hasUpdate := instanceMethods[path]["post"]
+			if hasUpdate {
+				update = updateRaw.RequestBody.Content.FormUrlencoded.Schema
 			}
-		}
-		if idField == "" {
-			log.Printf("Skipping %s, no id field", path)
-			continue
 		}
 
-		updatable := map[string]bool{}
-		{
-			update, hasUpdate := instanceMethods[path]["post"]
-			if hasUpdate {
-				updateSchema := Reunmarshal[OpenApiObj](update.RequestBody.Content.FormUrlencoded.Schema)
-				for paramName := range updateSchema.Properties {
-					updatable[paramName] = true
-				}
-			}
-		}
 		_, hasDelete := instanceMethods[path]["delete"]
 
 		if post.RequestBody.Content.FormUrlencoded.Schema == nil {
@@ -426,26 +622,45 @@ func main() {
 			continue
 		}
 		fields := (*BuildNode(
+			map[string]bool{},
 			spec.Components.Schemas,
 			post.RequestBody.Content.FormUrlencoded.Schema,
+			update,
+			Reunmarshal[any](objSpec),
 		)).(*NodeObj)
 
 		hasActive := false
+		noneUpdatable := true
+		idField := ""
 		for _, f := range fields.Fields {
-			if f.ApiKey == "active" {
+			if f.Key == "active" {
 				hasActive = true
-				break
+			}
+			if f.Key == "id" {
+				idField = f.Key
+				f.Computed = true
+			}
+			if f.Updatable {
+				noneUpdatable = false
 			}
 		}
-
+		if idField == "" {
+			log.Printf("Skipping %s, no id field", path)
+			continue
+		}
+		if noneUpdatable {
+			log.Printf("Skipping %s, no updatable fields", path)
+			continue
+		}
 		if !hasDelete && !hasActive {
 			log.Printf("Skipping %s, no active and no delete", path)
 			continue
 		}
-
 		fields.Fields = Filter(fields.Fields, func(v *NodeObjField) bool {
-			switch v.ApiKey {
-			case "expand", "metadata", "active":
+			switch v.Key {
+			case "expand", "metadata", "active": // api meta, not resource
+				return false
+			case "last_finalization_error": // weird fields that I don't want to support
 				return false
 			default:
 				return true
@@ -465,36 +680,8 @@ func main() {
 		idUrlPathExpr := jen.Qual("fmt", "Sprintf").Call(jen.Lit(path+"/%v"), jen.Id(inputName).Dot("Get").Call(jen.Lit(idField)))
 		emptyPathExpr := Unused(func() jen.Code { return jen.Qual(CtyPkg, "Path").Values(jen.Dict{}) })
 
-		noneUpdatable := true
 		topSchemaFields := jen.Dict{}
-		for _, field := range fields.Fields {
-			if updatable[field.ApiKey] {
-				noneUpdatable = false
-			}
-			if objField, isObj := field.Spec.(*NodeObj); isObj {
-				objField.genFieldInner(topSchemaFields, !field.Required)
-			} else {
-				fieldOut := field.Spec.GenField()
-				fieldOut[jen.Id("Description")] = jen.Lit(field.Description)
-				if field.TfKey == "id" {
-					fieldOut[jen.Id("Computed")] = jen.True()
-				} else {
-					if field.Required {
-						fieldOut[jen.Id("Required")] = jen.True()
-					} else {
-						fieldOut[jen.Id("Optional")] = jen.True()
-					}
-					if !updatable[field.ApiKey] {
-						fieldOut[jen.Id("ForceNew")] = jen.True()
-					}
-				}
-				topSchemaFields[jen.Lit(field.ApiKey)] = jen.Values(fieldOut)
-			}
-		}
-		if noneUpdatable {
-			log.Printf("Skipping %s, no updatable fields", path)
-			continue
-		}
+		fields.genFieldInner(topSchemaFields, false, "")
 
 		jenResFile := jen.NewFile("main")
 		funcName := "resources_" + collName
@@ -510,25 +697,13 @@ func main() {
 					paramsId := "params"
 					g.Add(getClientStmt)
 					g.Add(createDiagStmt)
-					g.Add(jen.Id(paramsId).Op(":=").Map(jen.String()).Any().Values(jen.Dict{}))
-					for _, field := range fields.Fields {
-						if field.Required {
-							g.Add(jen.Id(paramsId).Index(jen.Lit(field.ApiKey)).Op("=").Add(
-								field.Spec.ValidateSetApi(
-									emptyPathExpr,
-									jen.Id(inputName).Dot("Get").Call(jen.Lit(field.TfKey)),
-								)))
-						} else {
-							g.If(jen.List(
-								jen.Id("v"),
-								jen.Id("exists"),
-							).Op(":=").Id(inputName).Dot("GetOk").Call(jen.Lit(field.TfKey)).Op(";").Id("exists")).Block(
-								jen.Id(paramsId).Index(jen.Lit(field.ApiKey)).Op("=").Add(
-									field.Spec.ValidateSetApi(emptyPathExpr, jen.Id("v")),
-								),
-							)
-						}
-					}
+					g.Add(jen.Id(paramsId).Op(":=").Add(fields.ValidateSetApi(
+						false,
+						emptyPathExpr,
+						&CreateRootTfSourceVal{
+							Base: inputName,
+							Key:  "",
+						})))
 					g.Add(jen.If(jen.Len(jen.Id(DiagId)).Op(">").Lit(0)).Block(
 						jen.Return(jen.Id(DiagId)),
 					))
@@ -547,7 +722,7 @@ func main() {
 					g.Add(createDiagStmt)
 					g.Add(jen.List(jen.Id("res"), jen.Id("err")).Op(":=").Id(facilId).Dot("Get").Call(jen.Id("ctx"), idUrlPathExpr))
 					g.Add(CondAddDiagErr(true, emptyPathExpr.Use(), fmt.Sprintf("failed to look up %s %%s", objName), idExpr))
-					for _, statement := range fields.readApiInner(jen.Id("res"), P(RootTfDestColl(inputName))) {
+					for _, statement := range fields.readApiInner(jen.Id("res"), &RootTfDestColl{Base: inputName, TfPrefix: ""}) {
 						g.Add(statement)
 					}
 					g.Add(jen.Return(jen.Id(DiagId)))
@@ -561,20 +736,14 @@ func main() {
 					paramsId := "params"
 					g.Add(getClientStmt)
 					g.Add(createDiagStmt)
-					g.Add(jen.Id(paramsId).Op(":=").Map(jen.String()).Any().Values(jen.Dict{}))
-					for _, field := range fields.Fields {
-						if !updatable[field.TfKey] {
-							continue
-						}
-						g.If(jen.Id(inputName).Dot("HasChange").Call(jen.Lit(field.ApiKey))).Block(
-							jen.Id(paramsId).Index(jen.Lit(field.ApiKey)).Op("=").Add(
-								field.Spec.ValidateSetApi(
-									emptyPathExpr,
-									jen.Id(inputName).Dot("Get").Call(jen.Lit(field.TfKey)),
-								),
-							),
-						)
-					}
+					g.Add(jen.Id(paramsId).Op(":=").Add(fields.ValidateSetApi(
+						true,
+						emptyPathExpr,
+						&UpdateRootTfSourceVal{
+							Base: inputName,
+							Key:  "",
+						},
+					)))
 					g.Add(jen.If(jen.Len(jen.Id(DiagId)).Op(">").Lit(0)).Block(
 						jen.Return(jen.Id(DiagId)),
 					))

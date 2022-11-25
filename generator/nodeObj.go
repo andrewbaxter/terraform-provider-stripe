@@ -1,12 +1,16 @@
 package main
 
-import "github.com/dave/jennifer/jen"
+import (
+	"github.com/dave/jennifer/jen"
+)
 
 type NodeObjField struct {
 	Description string
-	ApiKey      string
-	TfKey       string
+	Key         string
+	Computed    bool
 	Required    bool
+	Updatable   bool
+	Readable    bool
 	Spec        Node
 }
 
@@ -15,19 +19,26 @@ type NodeObj struct {
 	Fields       []*NodeObjField
 }
 
-func (n *NodeObj) genFieldInner(outFields jen.Dict, flattenParentOptional bool) {
+func (n *NodeObj) genFieldInner(outFields jen.Dict, flattenParentOptional bool, flattenPrefix string) {
 	for _, field := range n.Fields {
 		if objField, isObj := field.Spec.(*NodeObj); isObj {
-			objField.genFieldInner(outFields, flattenParentOptional || !field.Required)
+			objField.genFieldInner(outFields, flattenParentOptional || !field.Required, flattenPrefix+field.Key+"_")
 		} else {
 			fieldOut := field.Spec.GenField()
 			fieldOut[jen.Id("Description")] = jen.Lit(field.Description)
-			if !flattenParentOptional && field.Required {
-				fieldOut[jen.Id("Required")] = jen.True()
+			if field.Computed {
+				fieldOut[jen.Id("Computed")] = jen.True()
 			} else {
-				fieldOut[jen.Id("Optional")] = jen.True()
+				if !flattenParentOptional && field.Required {
+					fieldOut[jen.Id("Required")] = jen.True()
+				} else {
+					fieldOut[jen.Id("Optional")] = jen.True()
+				}
+				if !field.Updatable {
+					fieldOut[jen.Id("ForceNew")] = jen.True()
+				}
 			}
-			outFields[jen.Lit(field.TfKey)] = jen.Values(fieldOut)
+			outFields[jen.Lit(flattenPrefix+field.Key)] = jen.Values(fieldOut)
 		}
 	}
 }
@@ -45,7 +56,7 @@ func (n *NodeObj) GenElem() jen.Code {
 			jen.Id("Required"):    jen.True(),
 		})
 	}
-	n.genFieldInner(outFields, false)
+	n.genFieldInner(outFields, false, "")
 	return jen.Op("&").Qual(SchemaPkg, "Resource").Values(jen.Dict{
 		jen.Id("Schema"): jen.Map(jen.String()).Op("*").Qual(SchemaPkg, "Schema").Values(outFields),
 	})
@@ -54,13 +65,22 @@ func (n *NodeObj) GenElem() jen.Code {
 func (n *NodeObj) readApiInner(apiSource jen.Code, tfDest TfDestColl) []jen.Code {
 	fields := []jen.Code{}
 	for _, field := range n.Fields {
+		if !field.Readable {
+			continue
+		}
 		if objField, isObj := field.Spec.(*NodeObj); isObj {
+			if !objField.checkAnyReadable() {
+				continue
+			}
 			// Flatten nested objects
-			fields = append(fields, objField.readApiInner(apiSource, tfDest)...)
+			fields = append(fields, objField.readApiFlat(
+				jen.Qual(SharedPkg, "DigAny").Call(apiSource, jen.Lit(field.Key)),
+				tfDest.FlatField(field.Key),
+			)...)
 		} else {
 			statements := field.Spec.ReadApi(
-				jen.Qual(SharedPkg, "Dig").Index(jen.Any()).Call(apiSource, jen.Lit(field.ApiKey)),
-				tfDest.Field(field.TfKey),
+				jen.Qual(SharedPkg, "DigAny").Call(apiSource, jen.Lit(field.Key)),
+				tfDest.Field(field.Key),
 			)
 			if len(statements) > 1 {
 				fields = append(fields, jen.Block(statements...))
@@ -70,6 +90,37 @@ func (n *NodeObj) readApiInner(apiSource jen.Code, tfDest TfDestColl) []jen.Code
 		}
 	}
 	return fields
+}
+
+func (n *NodeObj) checkAnyReadable() bool {
+	for _, f := range n.Fields {
+		if !f.Readable {
+			continue
+		}
+
+		if objField, isObj := f.Spec.(*NodeObj); isObj {
+			if objField.checkAnyReadable() {
+				return true
+			}
+		} else {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (n *NodeObj) readApiFlat(apiSource jen.Code, tfDest TfDestColl) []jen.Code {
+	apiSourceId := "outerSource"
+	return []jen.Code{
+		jen.If(jen.List(jen.Id(apiSourceId), jen.Id("isMap")).Op(":=").Add(apiSource).Assert(jen.Map(jen.String()).Any()).Op(";").
+			Id("isMap")).
+			Block(Flatten([][]jen.Code{
+				{jen.Comment("NodeObj readApiFlat")},
+				n.readApiInner(jen.Id(apiSourceId), tfDest),
+				{jen.Comment("NodeObj readApiFlat END")},
+			})...),
+	}
 }
 
 func (n *NodeObj) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
@@ -88,46 +139,101 @@ func (n *NodeObj) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 	statements = append(
 		statements,
 		jen.Block(Flatten([][]jen.Code{
-			{
-				jen.Id("outerDest").Op(":=").Id(tfDestId),
-			},
-			n.readApiInner(jen.Id(apiSourceId), P(MapTfDestColl("outerDest"))),
+			{jen.Id("outerDest").Op(":=").Id(tfDestId)},
+			n.readApiInner(jen.Id(apiSourceId), &MapTfDestColl{Base: "outerDest", TfPrefix: ""}),
 		})...),
 		tfDest.Set(jen.Id(tfDestId)),
+		jen.Comment("NodeObj ReadApi END"),
 	)
 	return statements
 }
 
-func (n *NodeObj) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) jen.Code {
-	tfSourceId := "outerSource"
+func (n *NodeObj) checkAnyReq() bool {
+	for _, f := range n.Fields {
+		if !f.Required {
+			continue
+		}
+
+		if objField, isObj := f.Spec.(*NodeObj); isObj {
+			if objField.checkAnyReq() {
+				return true
+			}
+		} else {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (n *NodeObj) buildAnyTfFieldsPresent(tfSource TfSourceVal) *jen.Statement {
+	var cond *jen.Statement = nil
+	for _, f := range n.Fields {
+		if !f.Required {
+			continue
+		}
+		var inner jen.Code = nil
+		if objField, isObj := f.Spec.(*NodeObj); isObj {
+			inner1 := objField.buildAnyTfFieldsPresent(tfSource.Field(f.Key))
+			if inner1 == nil {
+				continue
+			}
+			inner = inner1
+		} else {
+			inner = tfSource.Field(f.Key).Ok()
+		}
+		if cond == nil {
+			cond = jen.Add(inner)
+		} else {
+			cond.Op("&&").Add(inner)
+		}
+	}
+	return cond
+}
+
+func (n *NodeObj) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code {
 	apiDestId := "dest"
 	fields := []jen.Code{}
-	childPath := Unused(func() jen.Code { return jen.Id("path") })
 	if n.FakeMapField {
 		fields = append(
 			fields,
-			jen.Id(apiDestId).Index(jen.Lit("key")).Op("=").
-				Qual(SharedPkg, "Dig").Index(jen.String()).Call(jen.Id(tfSourceId), jen.Lit("key")),
+			jen.Id(apiDestId).Index(jen.Lit("key")).Op("=").Add(tfSource.Field("key").Get()),
 		)
 	}
+	anyPresentId := "anyPresent"
+	anyPresent := Unused(func() jen.Code { return jen.Id(anyPresentId) })
 	for _, field := range n.Fields {
+		if update && !field.Updatable {
+			continue
+		}
 		if objField, isObj := field.Spec.(*NodeObj); isObj {
 			// Flattened nested objects
 			fields = append(
 				fields,
-				jen.Id(apiDestId).Index(jen.Lit(field.ApiKey)).Op("=").Add(objField.ValidateSetApi(childPath, jen.Id(tfSourceId))),
+				jen.Id(apiDestId).Index(jen.Lit(field.Key)).Op("=").Add(objField.ValidateSetApi(
+					update,
+					tfPath,
+					tfSource.Field(field.Key),
+				)),
 			)
 		} else {
 			// Normal fields
 			childChildPath := Unused(func() jen.Code { return jen.Id("path") })
-			if_ := jen.If(jen.Id("v").Op("!=").Nil()).Block(
-				jen.Id(apiDestId).Index(jen.Lit(field.ApiKey)).Op("=").Add(field.Spec.ValidateSetApi(childChildPath, jen.Id("v"))),
+			if_ := jen.If(jen.List(jen.Id("v"), jen.Id("vOk")).Op(":=").Add(tfSource.Field(field.Key).GetOk()).Op(";").Id("vOk")).Block(
+				jen.Id(apiDestId).Index(jen.Lit(field.Key)).Op("=").Add(field.Spec.ValidateSetApi(
+					update,
+					childChildPath,
+					P(AnyTfSourceVal("v")),
+				)),
 			)
 			if field.Required {
-				if_.Else().Block(
+				if_.Else().If(anyPresent.Use()).Block(
 					jen.Id("out").Op("=").Id("append").Call(jen.Id("out"), jen.Qual(DiagPkg, "Diagnostic").Values(jen.Dict{
-						jen.Id("Severity"):      jen.Qual(DiagPkg, "Error"),
-						jen.Id("Summary"):       jen.Lit("Field is missing but required."),
+						jen.Id("Severity"): jen.Qual(DiagPkg, "Error"),
+						jen.Id("Summary"): jen.Qual("fmt", "Sprintf").Call(
+							jen.Lit("Field is missing but required. (at %s)"),
+							jen.Id("fmtPath").Call(jen.Id("path")),
+						),
 						jen.Id("AttributePath"): childChildPath.Use(),
 					})),
 				)
@@ -136,29 +242,26 @@ func (n *NodeObj) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) je
 			if childChildPath.WasUsed() {
 				pre = append(
 					pre,
-					jen.Id("path").Op(":=").Add(childPath.Use()).Dot("IndexString").Call(jen.Lit(field.TfKey)),
+					jen.Id("path").Op(":=").Add(tfPath.Use()).Dot("IndexString").Call(jen.Lit(field.Key)),
 				)
 			}
 			fields = append(fields, jen.Block(Flatten([][]jen.Code{
 				pre,
-				{
-					jen.Id("v").Op(":=").Qual(SharedPkg, "Dig").Index(jen.Any()).Call(jen.Id(tfSourceId), jen.Lit(field.TfKey)),
-					if_,
-				},
+				{if_},
 			})...))
 		}
 	}
 	pre := []jen.Code{
 		jen.Comment("NodeObj ValidateSetApi"),
-	}
-	if childPath.WasUsed() {
-		pre = append(pre, jen.Id("path").Op(":=").Add(tfPath.Use()))
-	}
-	pre = append(
-		pre,
-		jen.Id(tfSourceId).Op(":=").Add(tfSource),
 		jen.Id(apiDestId).Op(":=").Map(jen.String()).Any().Values(jen.Dict{}),
-	)
+	}
+	if anyPresent.WasUsed() {
+		cond := n.buildAnyTfFieldsPresent(tfSource)
+		if cond == nil {
+			cond = jen.False()
+		}
+		pre = append(pre, jen.Id(anyPresentId).Op(":=").Add(cond))
+	}
 	return FakeScope(
 		jen.Any(),
 		Flatten([][]jen.Code{

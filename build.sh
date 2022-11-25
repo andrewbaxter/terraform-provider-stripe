@@ -1,5 +1,5 @@
 #!/usr/bin/bash -xeu
-rm generated/resources*
+rm -rf generated/resources*
 go run ./generator
 cd generated
 rm -rf docs

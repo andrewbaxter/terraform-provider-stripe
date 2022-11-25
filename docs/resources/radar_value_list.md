@@ -26,6 +26,27 @@ description: |-
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `created` (Number) Time at which the object was created. Measured in seconds since the Unix epoch.
+- `created_by` (String) The name or email address of the user who created this value list.
+- `id` (String) Unique identifier for the object.
+- `list_items_data` (List of Object) Details about each object. (see [below for nested schema](#nestedatt--list_items_data))
+- `list_items_has_more` (Boolean) True if this list has another page of items after this one that can be fetched.
+- `list_items_object` (String) String representing the object's type. Objects of the same type share the same value. Always has the value `list`.
+- `list_items_url` (String) The URL where this list can be accessed.
+- `livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
+- `object` (String) String representing the object's type. Objects of the same type share the same value.
+
+<a id="nestedatt--list_items_data"></a>
+### Nested Schema for `list_items_data`
+
+Read-Only:
+
+- `created` (Number)
+- `created_by` (String)
+- `id` (String)
+- `livemode` (Boolean)
+- `object` (String)
+- `value` (String)
+- `value_list` (String)
 
 

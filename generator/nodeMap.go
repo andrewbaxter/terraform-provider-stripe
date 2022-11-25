@@ -35,14 +35,10 @@ func (n *NodeMap) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 	}
 }
 
-func (n *NodeMap) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) jen.Code {
-	tfSourceId := "outerSource"
+func (n *NodeMap) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code {
 	apiDestId := "dest"
 	childPath := Unused(func() jen.Code { return jen.Id("path").Dot("IndexString").Call(jen.Id("k")) })
-	validate := n.Elem.ValidateSetApi(
-		childPath,
-		jen.Id("v"),
-	)
+	validate := n.Elem.ValidateSetApi(update, childPath, P(AnyTfSourceVal("v")))
 	pre := []jen.Code{
 		jen.Comment("NodeMap ValidateSetApi"),
 	}
@@ -52,17 +48,19 @@ func (n *NodeMap) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) je
 			jen.Id("path").Op(":=").Add(tfPath.Use()),
 		)
 	}
+	tfSourceId := "outerSource"
 	return FakeScope(
 		jen.Any(),
 		Flatten([][]jen.Code{
 			pre,
 			{
-				jen.Id(tfSourceId).Op(":=").Add(tfSource).Assert(jen.Map(jen.String()).Any()),
+				jen.Id(tfSourceId).Op(":=").Add(tfSource.Get()).Assert(jen.Map(jen.String()).Any()),
 				jen.Id(apiDestId).Op(":=").Map(jen.String()).Any().Values(),
 				jen.For(jen.List(jen.Id("k"), jen.Id("v")).Op(":=").Range().Id(tfSourceId)).Block(
 					jen.Id(apiDestId).Index(jen.Id("k")).Op("=").Add(validate),
 				),
 				jen.Return(jen.Id(apiDestId)),
+				jen.Comment("NodeMap ValidateSetApi END"),
 			},
 		}),
 	)

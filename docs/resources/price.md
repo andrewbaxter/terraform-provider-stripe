@@ -24,9 +24,9 @@ description: |-
 - `billing_scheme` (String) Describes how to compute the price per period. Either `per_unit` or `tiered`. `per_unit` indicates that the fixed amount (specified in `unit_amount` or `unit_amount_decimal`) will be charged per unit in `quantity` (for prices with `usage_type=licensed`), or per unit of total usage (for prices with `usage_type=metered`). `tiered` indicates that the unit pricing will be computed using a tiering strategy as defined using the `tiers` and `tiers_mode` attributes.
 - `currency_options` (Block List) Prices defined in each available currency option. Each key must be a three-letter [ISO currency code](https://www.iso.org/iso-4217-currency-codes.html) and a [supported currency](https://stripe.com/docs/currencies). (see [below for nested schema](#nestedblock--currency_options))
 - `custom_unit_amount_enabled` (Boolean)
-- `custom_unit_amount_maximum` (Number)
-- `custom_unit_amount_minimum` (Number)
-- `custom_unit_amount_preset` (Number)
+- `custom_unit_amount_maximum` (Number) The maximum unit amount the customer can specify for this item.
+- `custom_unit_amount_minimum` (Number) The minimum unit amount the customer can specify for this item. Must be at least the minimum charge amount.
+- `custom_unit_amount_preset` (Number) The starting unit amount which can be updated by the customer.
 - `lookup_key` (String) A lookup key used to retrieve prices dynamically from a static string. This may be up to 200 characters.
 - `nickname` (String) A brief description of the price, hidden from customers.
 - `product` (String) The ID of the product that this price will belong to.
@@ -37,22 +37,26 @@ description: |-
 - `product_data_statement_descriptor` (String)
 - `product_data_tax_code` (String)
 - `product_data_unit_label` (String)
-- `recurring_aggregate_usage` (String)
-- `recurring_interval` (String)
-- `recurring_interval_count` (Number)
-- `recurring_usage_type` (String)
+- `recurring_aggregate_usage` (String) Specifies a usage aggregation strategy for prices of `usage_type=metered`. Allowed values are `sum` for summing up all usage during a period, `last_during_period` for using the last usage record reported within a period, `last_ever` for using the last usage record ever (across period bounds) or `max` which uses the usage record with the maximum reported usage during a period. Defaults to `sum`.
+- `recurring_interval` (String) The frequency at which a subscription is billed. One of `day`, `week`, `month` or `year`.
+- `recurring_interval_count` (Number) The number of intervals (specified in the `interval` attribute) between subscription billings. For example, `interval=month` and `interval_count=3` bills every 3 months.
+- `recurring_usage_type` (String) Configures how the quantity per period should be determined. Can be either `metered` or `licensed`. `licensed` automatically bills the `quantity` set when adding it to a subscription. `metered` aggregates the total usage based on usage records. Defaults to `licensed`.
 - `tax_behavior` (String) Specifies whether the price is considered inclusive of taxes or exclusive of taxes. One of `inclusive`, `exclusive`, or `unspecified`. Once specified as either `inclusive` or `exclusive`, it cannot be changed.
 - `tiers` (Block List) Each element represents a pricing tier. This parameter requires `billing_scheme` to be set to `tiered`. See also the documentation for `billing_scheme`. (see [below for nested schema](#nestedblock--tiers))
 - `tiers_mode` (String) Defines if the tiering price should be `graduated` or `volume` based. In `volume`-based tiering, the maximum quantity within a period determines the per unit price, in `graduated` tiering pricing can successively change as the quantity grows.
 - `transfer_lookup_key` (Boolean) If set to true, will atomically remove the lookup key from the existing price, and assign it to this price.
-- `transform_quantity_divide_by` (Number)
-- `transform_quantity_round` (String)
+- `transform_quantity_divide_by` (Number) Divide usage by this number.
+- `transform_quantity_round` (String) After division, either round the result `up` or `down`.
 - `unit_amount` (Number) A positive integer in cents (or local equivalent) (or 0 for a free price) representing how much to charge. One of `unit_amount` or `custom_unit_amount` is required, unless `billing_scheme=tiered`.
 - `unit_amount_decimal` (String) Same as `unit_amount`, but accepts a decimal value in cents (or local equivalent) with at most 12 decimal places. Only one of `unit_amount` and `unit_amount_decimal` can be set.
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `created` (Number) Time at which the object was created. Measured in seconds since the Unix epoch.
+- `id` (String) Unique identifier for the object.
+- `livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
+- `object` (String) String representing the object's type. Objects of the same type share the same value.
+- `type` (String) One of `one_time` or `recurring` depending on whether the price is for a one-time purchase or a recurring (subscription) purchase.
 
 <a id="nestedblock--currency_options"></a>
 ### Nested Schema for `currency_options`
@@ -64,27 +68,27 @@ Required:
 Optional:
 
 - `custom_unit_amount_enabled` (Boolean)
-- `custom_unit_amount_maximum` (Number)
-- `custom_unit_amount_minimum` (Number)
-- `custom_unit_amount_preset` (Number)
-- `tax_behavior` (String)
-- `tiers` (Block List) (see [below for nested schema](#nestedblock--currency_options--tiers))
-- `unit_amount` (Number)
-- `unit_amount_decimal` (String)
+- `custom_unit_amount_maximum` (Number) The maximum unit amount the customer can specify for this item.
+- `custom_unit_amount_minimum` (Number) The minimum unit amount the customer can specify for this item. Must be at least the minimum charge amount.
+- `custom_unit_amount_preset` (Number) The starting unit amount which can be updated by the customer.
+- `tax_behavior` (String) Specifies whether the price is considered inclusive of taxes or exclusive of taxes. One of `inclusive`, `exclusive`, or `unspecified`. Once specified as either `inclusive` or `exclusive`, it cannot be changed.
+- `tiers` (Block List) Each element represents a pricing tier. This parameter requires `billing_scheme` to be set to `tiered`. See also the documentation for `billing_scheme`. (see [below for nested schema](#nestedblock--currency_options--tiers))
+- `unit_amount` (Number) The unit amount in %s to be charged, represented as a whole integer if possible. Only set if `billing_scheme=per_unit`.
+- `unit_amount_decimal` (String) The unit amount in %s to be charged, represented as a decimal string with at most 12 decimal places. Only set if `billing_scheme=per_unit`.
 
 <a id="nestedblock--currency_options--tiers"></a>
 ### Nested Schema for `currency_options.tiers`
 
 Required:
 
-- `up_to` (Number)
+- `up_to` (Number) Up to and including to this quantity will be contained in the tier.
 
 Optional:
 
-- `flat_amount` (Number)
-- `flat_amount_decimal` (String)
-- `unit_amount` (Number)
-- `unit_amount_decimal` (String)
+- `flat_amount` (Number) Price for the entire tier.
+- `flat_amount_decimal` (String) Same as `flat_amount`, but contains a decimal value with at most 12 decimal places.
+- `unit_amount` (Number) Per unit price for units relevant to the tier.
+- `unit_amount_decimal` (String) Same as `unit_amount`, but contains a decimal value with at most 12 decimal places.
 
 
 
@@ -93,13 +97,13 @@ Optional:
 
 Required:
 
-- `up_to` (Number)
+- `up_to` (Number) Up to and including to this quantity will be contained in the tier.
 
 Optional:
 
-- `flat_amount` (Number)
-- `flat_amount_decimal` (String)
-- `unit_amount` (Number)
-- `unit_amount_decimal` (String)
+- `flat_amount` (Number) Price for the entire tier.
+- `flat_amount_decimal` (String) Same as `flat_amount`, but contains a decimal value with at most 12 decimal places.
+- `unit_amount` (Number) Per unit price for units relevant to the tier.
+- `unit_amount_decimal` (String) Same as `unit_amount`, but contains a decimal value with at most 12 decimal places.
 
 

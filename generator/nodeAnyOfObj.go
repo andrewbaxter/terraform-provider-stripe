@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/dave/jennifer/jen"
 )
 
@@ -14,7 +16,7 @@ func (n *NodeAnyOfObjs) synthObj() *NodeObj {
 		for _, prop := range o.Fields {
 			fields = append(fields, &NodeObjField{
 				Description: prop.Description,
-				ApiKey:      prop.ApiKey,
+				Key:         prop.Key,
 				Required:    false,
 				Spec:        prop.Spec,
 			})
@@ -37,24 +39,20 @@ func (n *NodeAnyOfObjs) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code
 	return n.synthObj().ReadApi(apiSource, tfDest)
 }
 
-func (n *NodeAnyOfObjs) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) jen.Code {
-	tfSourceId := "outerSource"
+func (n *NodeAnyOfObjs) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code {
 	optionStatements := []jen.Code{}
 	for _, o := range n.Options {
-		var cond *jen.Statement = nil
-		for _, f := range o.Fields {
-			if !f.Required {
-				continue
-			}
-			if cond == nil {
-				cond = jen.Id("inMap")
-			} else {
-				cond.Op("&&").Id("inMap")
-			}
-			cond.Call(jen.Lit(f.ApiKey), jen.Id(tfSourceId))
+		cond := o.buildAnyTfFieldsPresent(tfSource)
+		if cond == nil {
+			panic("ASSERTION") // no identifiable fields for variant
 		}
 		optionStatements = append(optionStatements, jen.If(cond).Block(
-			jen.Return(o.ValidateSetApi(Unused(func() jen.Code { return jen.Id("path") }), jen.Id(tfSourceId))),
+			jen.Comment(fmt.Sprintf("XXX %#v %t", cond, cond == nil)),
+			jen.Return(o.ValidateSetApi(
+				update,
+				Unused(func() jen.Code { return jen.Id("path") }),
+				tfSource,
+			)),
 		))
 	}
 	return FakeScope(
@@ -63,7 +61,6 @@ func (n *NodeAnyOfObjs) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Co
 			[][]jen.Code{
 				{
 					jen.Id("path").Op(":=").Add(tfPath.Use()),
-					jen.Id(tfSourceId).Op(":=").Add(tfSource).Assert(jen.Map(jen.String()).Any()),
 				},
 				optionStatements,
 				{

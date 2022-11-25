@@ -7,21 +7,17 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
+	"strings"
 
 	"github.com/andrewbaxter/terraform-provider-stripe/shared"
 	"github.com/go-playground/form/v4"
 	"github.com/go-resty/resty/v2"
+	cty "github.com/hashicorp/go-cty/cty"
 	schema "github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	plugin "github.com/hashicorp/terraform-plugin-sdk/v2/plugin"
 	"github.com/stripe/stripe-go/v74"
 	"go.uber.org/ratelimit"
 )
-
-func IsDebug() bool {
-	v, _ := os.LookupEnv("STRIPE_TF_DEBUG")
-	return v != ""
-}
 
 func Json(x any) string {
 	out, _ := json.MarshalIndent(x, "", "  ")
@@ -95,18 +91,17 @@ type Facilitator struct {
 	limit ratelimit.Limiter
 }
 
-func (f *Facilitator) Post(ctx context.Context, path string, data map[string]any) (any, error) {
+func (f *Facilitator) Post(ctx context.Context, path string, data any) (any, error) {
 	f.limit.Take()
-	if IsDebug() {
-		log.Printf("POST %s\n%s", path, Json(data))
-	}
+	log.Printf("STRIPE POST %s\n%s", path, Json(data))
 	res, err := f.c.R().
 		SetHeader(HeaderIdempotencyKey, stripe.NewIdempotencyKey()).
-		SetFormDataFromValues(shared.Must(f.enc.Encode(data))).
+		SetFormDataFromValues(shared.Must(f.enc.Encode(data.(map[string]any)))).
 		Post(path)
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("STRIPE POST RESP %s %d\n[[%s]]", path, res.StatusCode(), res.Body())
 	if res.IsError() {
 		return nil, fmt.Errorf("request returned error response %d:\n%s", res.StatusCode(), res.Body())
 	}
@@ -120,13 +115,12 @@ func (f *Facilitator) Post(ctx context.Context, path string, data map[string]any
 
 func (f *Facilitator) Get(ctx context.Context, path string) (any, error) {
 	f.limit.Take()
-	if IsDebug() {
-		log.Printf("GET %s", path)
-	}
+	log.Printf("STRIPE GET %s", path)
 	res, err := f.c.R().Get(path)
 	if err != nil {
 		return nil, err
 	}
+	log.Printf("STRIPE GET RESP %s %d\n[[%s]]", path, res.StatusCode(), res.Body())
 	if res.IsError() {
 		return nil, fmt.Errorf("request returned error response %d:\n%s", res.StatusCode(), res.Body())
 	}
@@ -140,15 +134,14 @@ func (f *Facilitator) Get(ctx context.Context, path string) (any, error) {
 
 func (f *Facilitator) Delete(ctx context.Context, path string) error {
 	f.limit.Take()
-	if IsDebug() {
-		log.Printf("DELETE %s", path)
-	}
+	log.Printf("STRIPE DELETE %s", path)
 	res, err := f.c.R().
 		SetHeader(HeaderIdempotencyKey, stripe.NewIdempotencyKey()).
 		Delete(path)
 	if err != nil {
 		return err
 	}
+	log.Printf("STRIPE DELETE RESP %s %d\n[[%s]]", path, res.StatusCode(), res.Body())
 	if res.IsError() {
 		return fmt.Errorf("request returned error response %d:\n%s", res.StatusCode(), res.Body())
 	}
@@ -164,7 +157,16 @@ func inEnum(s string, values []string) bool {
 	return false
 }
 
-func inMap(key string, m map[string]any) bool {
-	_, res := m[key]
-	return res
+func inResourceData(key string, d *schema.ResourceData) bool {
+	_, ok := d.GetOk(key)
+	return ok
+}
+
+func fmtPath(path cty.Path) string {
+	out := []string{}
+	for _, k := range path {
+		k0 := k.(cty.IndexStep)
+		out = append(out, "/"+k0.Key.AsString())
+	}
+	return strings.Join(out, "")
 }

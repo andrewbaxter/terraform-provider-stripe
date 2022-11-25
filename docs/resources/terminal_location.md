@@ -17,20 +17,22 @@ description: |-
 
 ### Required
 
-- `address_country` (String)
+- `address_country` (String) Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
 - `display_name` (String) A name for the location.
 
 ### Optional
 
-- `address_city` (String)
-- `address_line1` (String)
-- `address_line2` (String)
-- `address_postal_code` (String)
-- `address_state` (String)
+- `address_city` (String) City, district, suburb, town, or village.
+- `address_line1` (String) Address line 1 (e.g., street, PO Box, or company name).
+- `address_line2` (String) Address line 2 (e.g., apartment, suite, unit, or building).
+- `address_postal_code` (String) ZIP or postal code.
+- `address_state` (String) State, county, province, or region.
 - `configuration_overrides` (String) The ID of a configuration that will be used to customize all readers in this location.
 
 ### Read-Only
 
-- `id` (String) The ID of this resource.
+- `id` (String) Unique identifier for the object.
+- `livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
+- `object` (String) String representing the object's type. Objects of the same type share the same value.
 
 

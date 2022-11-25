@@ -32,22 +32,13 @@ func (n *NodeFakeMap) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 	}
 }
 
-func (n *NodeFakeMap) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) jen.Code {
+func (n *NodeFakeMap) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code {
 	tfSourceId := "outerSource"
 	apiDestId := "dest"
-	childPath := Unused(func() jen.Code { return jen.Id("path").Dot("IndexInt").Call(jen.Id("i")) })
-	validate := n.Elem.ValidateSetApi(
-		childPath,
-		jen.Id("v"),
-	)
+	childPath := Unused(func() jen.Code { return jen.Add(tfPath.Use()).Dot("IndexInt").Call(jen.Id("i")) })
+	validate := n.Elem.ValidateSetApi(update, childPath, P(AnyTfSourceVal("v")))
 	pre := []jen.Code{
 		jen.Comment("NodeFakeMap ValidateSetApi"),
-	}
-	if childPath.WasUsed() {
-		pre = append(
-			pre,
-			jen.Id("path").Op(":=").Add(tfPath.Use()),
-		)
 	}
 	var index jen.Code
 	if childPath.WasUsed() {
@@ -60,7 +51,7 @@ func (n *NodeFakeMap) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code
 		Flatten([][]jen.Code{
 			pre,
 			{
-				jen.Id(tfSourceId).Op(":=").Add(tfSource).Assert(jen.Index().Any()),
+				jen.Id(tfSourceId).Op(":=").Add(tfSource.Get()).Assert(jen.Index().Any()),
 				jen.Id(apiDestId).Op(":=").Map(jen.String()).Any().Values(),
 				jen.For(jen.List(index, jen.Id("v")).Op(":=").Range().Id(tfSourceId)).Block(
 					jen.Id("subRes").Op(":=").Add(validate),
@@ -68,6 +59,7 @@ func (n *NodeFakeMap) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code
 					jen.Id(apiDestId).Index(jen.Id("key")).Op("=").Id("subRes"),
 				),
 				jen.Return(jen.Id(apiDestId)),
+				jen.Comment("NodeFakeMap ValidateSetApi END"),
 			},
 		}),
 	)

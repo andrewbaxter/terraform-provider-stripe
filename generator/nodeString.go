@@ -25,16 +25,17 @@ func (n *NodeString) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 	return []jen.Code{tfDest.Set(apiSource)}
 }
 
-func (n *NodeString) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code) jen.Code {
+func (n *NodeString) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code {
+	tfSourceId := "outerSource"
 	statements := []jen.Code{
-		jen.Id("sv").Op(":=").Add(tfSource),
+		jen.Id(tfSourceId).Op(":=").Add(tfSource.Get()),
 	}
 	if len(n.Enum) > 0 {
 		statements = append(
 			statements,
 			jen.If(
-				jen.Id("inEnum").Call(
-					jen.Add(tfSource).Assert(jen.String()),
+				jen.Op("!").Id("inEnum").Call(
+					jen.Id(tfSourceId).Assert(jen.String()),
 					jen.Index().String().Values(Map(
 						n.Enum,
 						func(e string) jen.Code { return jen.Lit(e) },
@@ -47,6 +48,6 @@ func (n *NodeString) ValidateSetApi(tfPath *Usable[jen.Code], tfSource jen.Code)
 			}))),
 		)
 	}
-	statements = append(statements, jen.Return(jen.Id("sv")))
+	statements = append(statements, jen.Return(jen.Id(tfSourceId)))
 	return FakeScope(jen.Any(), statements)
 }
