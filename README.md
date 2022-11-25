@@ -2,6 +2,8 @@ This is an unofficial Terraform provider for [Stripe](https://stripe.com/) autom
 
 If you find any issues with it or it needs to be updated please let me know!
 
+This is now (as of 2022-11-26) nominally working. If this works for you I'd also like to hear!
+
 * [Terraform Registry](https://registry.terraform.io/providers/andrewbaxter/stripe)
 
 # Installation with Terraform CDK
