@@ -4,13 +4,22 @@ import (
 	"github.com/dave/jennifer/jen"
 )
 
+type NodeObjFieldBehavior string
+
+const (
+	NBUserRequired         NodeObjFieldBehavior = NodeObjFieldBehavior("required")
+	NBUserOptional         NodeObjFieldBehavior = NodeObjFieldBehavior("optional")
+	NBUserOptionalComputed NodeObjFieldBehavior = NodeObjFieldBehavior("optionalcomputed")
+	NBComputed             NodeObjFieldBehavior = NodeObjFieldBehavior("computed")
+)
+
 type NodeObjField struct {
 	Description string
 	Key         string
-	Computed    bool
-	Required    bool
-	Updatable   bool
-	Readable    bool
+	Behavior    NodeObjFieldBehavior
+	Default     jen.Code
+	Updatable   bool // Only if user behavior
+	Readable    bool // Must be true for computed
 	Spec        Node
 }
 
@@ -22,21 +31,37 @@ type NodeObj struct {
 func (n *NodeObj) genFieldInner(outFields jen.Dict, flattenParentOptional bool, flattenPrefix string) {
 	for _, field := range n.Fields {
 		if objField, isObj := field.Spec.(*NodeObj); isObj {
-			objField.genFieldInner(outFields, flattenParentOptional || !field.Required, flattenPrefix+field.Key+"_")
+			objField.genFieldInner(outFields, flattenParentOptional || field.Behavior != NBUserRequired, flattenPrefix+field.Key+"_")
 		} else {
 			fieldOut := field.Spec.GenField()
 			fieldOut[jen.Id("Description")] = jen.Lit(field.Description)
-			if field.Computed {
-				fieldOut[jen.Id("Computed")] = jen.True()
-			} else {
-				if !flattenParentOptional && field.Required {
-					fieldOut[jen.Id("Required")] = jen.True()
-				} else {
-					fieldOut[jen.Id("Optional")] = jen.True()
-				}
+			switch field.Behavior {
+			case NBUserRequired:
+				fieldOut[jen.Id("Required")] = jen.True()
 				if !field.Updatable {
 					fieldOut[jen.Id("ForceNew")] = jen.True()
 				}
+			case NBUserOptional:
+				fieldOut[jen.Id("Optional")] = jen.True()
+				if !field.Updatable {
+					fieldOut[jen.Id("ForceNew")] = jen.True()
+				}
+				if field.Default != nil {
+					fieldOut[jen.Id("Default")] = field.Default
+				}
+			case NBUserOptionalComputed:
+				fieldOut[jen.Id("Optional")] = jen.True()
+				fieldOut[jen.Id("Computed")] = jen.True()
+				if !field.Updatable {
+					fieldOut[jen.Id("ForceNew")] = jen.True()
+				}
+				if field.Default != nil {
+					fieldOut[jen.Id("Default")] = field.Default
+				}
+			case NBComputed:
+				fieldOut[jen.Id("Computed")] = jen.True()
+			default:
+				panic("ASSERTION")
 			}
 			outFields[jen.Lit(flattenPrefix+field.Key)] = jen.Values(fieldOut)
 		}
@@ -150,7 +175,7 @@ func (n *NodeObj) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 
 func (n *NodeObj) checkAnyReq() bool {
 	for _, f := range n.Fields {
-		if !f.Required {
+		if f.Behavior != NBUserRequired {
 			continue
 		}
 
@@ -169,7 +194,7 @@ func (n *NodeObj) checkAnyReq() bool {
 func (n *NodeObj) buildAnyTfFieldsPresent(tfSource TfSourceVal) *jen.Statement {
 	var cond *jen.Statement = nil
 	for _, f := range n.Fields {
-		if !f.Required {
+		if f.Behavior != NBUserRequired {
 			continue
 		}
 		var inner jen.Code = nil
@@ -228,7 +253,7 @@ func (n *NodeObj) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 					P(AnyTfSourceVal("v")),
 				)),
 			)
-			if field.Required {
+			if field.Behavior == NBUserRequired {
 				if_.Else().If(anyPresent.Use()).Block(
 					jen.Id("out").Op("=").Id("append").Call(jen.Id("out"), jen.Qual(DiagPkg, "Diagnostic").Values(jen.Dict{
 						jen.Id("Severity"): jen.Qual(DiagPkg, "Error"),

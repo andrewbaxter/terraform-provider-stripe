@@ -202,9 +202,10 @@ type Node interface {
 	ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code
 }
 
-var OverrideFieldRequired = map[string]map[string]bool{
+var FixupFieldDefault = map[string]map[string]jen.Code{
 	"price": {
-		"billing_scheme": true, // filled in upstream if we don't, which leads to a diff + recreate
+		"billing_scheme": jen.Lit("per_unit"),
+		"tax_behavior":   jen.Lit("unspecified"),
 	},
 }
 
@@ -468,11 +469,16 @@ func BuildNode(
 					if propNode == nil {
 						continue
 					}
+					var behavior NodeObjFieldBehavior
+					if createRequired[propName] {
+						behavior = NBUserRequired
+					} else {
+						behavior = NBUserOptional
+					}
 					field := &NodeObjField{
 						Description: shared.Dig[string](prop, "description"),
 						Key:         propName,
-						Computed:    false,
-						Required:    createRequired[propName],
+						Behavior:    behavior,
 						Updatable:   shared.InMap(propName, updateFields),
 						Readable:    shared.InMap(propName, getFields),
 						Spec:        *propNode,
@@ -497,9 +503,7 @@ func BuildNode(
 				field := &NodeObjField{
 					Description: desc,
 					Key:         propName,
-					Computed:    true,
-					Required:    false,
-					Updatable:   false,
+					Behavior:    NBComputed,
 					Readable:    true,
 					Spec:        *propNode,
 				}
@@ -655,13 +659,14 @@ func main() {
 			}
 			if f.Key == "id" {
 				idField = f.Key
-				f.Computed = true
+				f.Behavior = NBComputed
 			}
 			if f.Updatable {
 				noneUpdatable = false
 			}
-			if OverrideFieldRequired[objName][f.Key] {
-				f.Required = true
+			default_, hasDefault := FixupFieldDefault[objName][f.Key]
+			if hasDefault {
+				f.Default = default_
 			}
 		}
 		if idField == "" {

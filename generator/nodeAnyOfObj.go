@@ -12,10 +12,14 @@ func (n *NodeAnyOfObjs) synthObj() *NodeObj {
 	fields := []*NodeObjField{}
 	for _, o := range n.Options {
 		for _, prop := range o.Fields {
+			behavior := prop.Behavior
+			if behavior == NBUserRequired {
+				behavior = NBUserOptional
+			}
 			fields = append(fields, &NodeObjField{
 				Description: prop.Description,
 				Key:         prop.Key,
-				Required:    false,
+				Behavior:    behavior,
 				Spec:        prop.Spec,
 			})
 		}
