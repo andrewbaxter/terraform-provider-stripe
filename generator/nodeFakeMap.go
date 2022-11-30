@@ -19,17 +19,20 @@ func (n *NodeFakeMap) GenElem() jen.Code {
 
 func (n *NodeFakeMap) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 	tfDestId := "dest"
-	return []jen.Code{
+	return []jen.Code{jen.If(jen.List(jen.Id("outerSource"), jen.Id("outerSourceOk").Op(":=")).
+		Add(apiSource).Assert(jen.Map(jen.String()).Any()).
+		Op(";").Id("outerSourceOk")).Block(
 		jen.Comment("NodeFakeMap ReadApi"),
 		jen.Id(tfDestId).Op(":=").Index().Any().Values(),
-		jen.For(jen.List(jen.Id("k"), jen.Id("v")).Op(":=").Range().Add(apiSource).Assert(jen.Map(jen.String()).Any())).Block(Flatten([][]jen.Code{
+		jen.For(jen.List(jen.Id("k"), jen.Id("v")).Op(":=").Range().Id("outerSource")).Block(Flatten([][]jen.Code{
 			{
 				jen.Id("outerDest").Op(":=").Id(tfDestId),
 			},
 			n.Elem.ReadApi(jen.Id("v"), P(ArrayTfDestVal("outerDest"))),
 		})...),
 		tfDest.Set(jen.Id(tfDestId)),
-	}
+		jen.Comment("NodeFakeMap ReadApi END"),
+	)}
 }
 
 func (n *NodeFakeMap) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code {

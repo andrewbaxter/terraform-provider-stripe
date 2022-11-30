@@ -22,15 +22,19 @@ func (n *NodeMap) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 	return []jen.Code{
 		jen.Comment("NodeMap ReadApi"),
 		jen.Id(tfDestId).Op(":=").Map(jen.String()).Any().Values(),
-		jen.For(jen.List(jen.Id("k"), jen.Id("v")).Op(":=").Range().Add(apiSource).Assert(jen.Map(jen.String()).Any())).Block(Flatten([][]jen.Code{
-			{
-				jen.Id("outerDest").Op(":=").Id(tfDestId),
-			},
-			n.Elem.ReadApi(jen.Id("v"), P(MapTfDestVal{
-				Base: "outerDest",
-				Key:  jen.Id("k"),
-			})),
-		})...),
+		// price lists currency_options in spec but not in reality
+		jen.If(jen.List(jen.Id("preKv"), jen.Id("preKvOk")).Op(":=").
+			Add(apiSource).Assert(jen.Map(jen.String()).Any())).Op(";").Id("preKvOk").Block(
+			jen.For(jen.List(jen.Id("k"), jen.Id("v")).Op(":=").Range().Id("preKv")).Block(Flatten([][]jen.Code{
+				{
+					jen.Id("outerDest").Op(":=").Id(tfDestId),
+				},
+				n.Elem.ReadApi(jen.Id("v"), P(MapTfDestVal{
+					Base: "outerDest",
+					Key:  jen.Id("k"),
+				})),
+			})...),
+		),
 		tfDest.Set(jen.Id(tfDestId)),
 	}
 }

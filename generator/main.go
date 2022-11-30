@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os/exec"
+	"sort"
 	"strings"
 
 	"github.com/andrewbaxter/terraform-provider-stripe/shared"
@@ -29,8 +30,8 @@ func Last[T any](x []T) T {
 	return x[len(x)-1]
 }
 
-func DigOpt[T any](bla any, field string) *T {
-	v, found := bla.(map[string]any)[field]
+func DigOpt[T any](obj any, field string) *T {
+	v, found := obj.(map[string]any)[field]
 	if !found {
 		return nil
 	}
@@ -41,15 +42,15 @@ func DigOpt[T any](bla any, field string) *T {
 	return &v1
 }
 
-func IndOpt[T any](bla []T, i int) T {
-	if i >= len(bla) {
+func IndexOpt[T any](arr []T, i int) T {
+	if i >= len(arr) {
 		return shared.Default[T]()
 	}
-	return bla[i]
+	return arr[i]
 }
 
-func Bury(bla any, field string, data string) {
-	m := bla.(map[string]any)
+func Bury(obj any, field string, data string) {
+	m := obj.(map[string]any)
 	old := m[field]
 	if data != "" && old != "" {
 		m[field] = fmt.Sprintf("%s %s", data, old)
@@ -199,6 +200,12 @@ type Node interface {
 	// Expression that checks the raw (any) value in tfSource and returns the value in the shape the api expects.
 	// For objects, this means turning a flattened map into nested maps for nested object specs.
 	ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code
+}
+
+var OverrideFieldRequired = map[string]map[string]bool{
+	"price": {
+		"billing_scheme": true, // filled in upstream if we don't, which leads to a diff + recreate
+	},
 }
 
 func BuildNode(
@@ -369,15 +376,15 @@ func BuildNode(
 				for i, sub := range createAnyOf {
 					filtered = append(filtered, El{
 						Create: sub,
-						Update: IndOpt(updateAnyOf, i),
-						Get:    IndOpt(getAnyOf, i),
+						Update: IndexOpt(updateAnyOf, i),
+						Get:    IndexOpt(getAnyOf, i),
 					})
 				}
 			} else {
 				for i, sub := range getAnyOf {
 					filtered = append(filtered, El{
 						Create: nil,
-						Update: IndOpt(updateAnyOf, i),
+						Update: IndexOpt(updateAnyOf, i),
 						Get:    sub,
 					})
 				}
@@ -504,6 +511,10 @@ func BuildNode(
 				log.Printf("Object field with no viable fields, skipping")
 				return nil
 			}
+
+			sort.Slice(fields, func(i, j int) bool {
+				return fields[i].Key < fields[j].Key
+			})
 
 			return P[Node](&NodeObj{
 				Fields: fields,
@@ -648,6 +659,9 @@ func main() {
 			}
 			if f.Updatable {
 				noneUpdatable = false
+			}
+			if OverrideFieldRequired[objName][f.Key] {
+				f.Required = true
 			}
 		}
 		if idField == "" {

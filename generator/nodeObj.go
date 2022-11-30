@@ -201,6 +201,8 @@ func (n *NodeObj) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 		)
 	}
 	anyPresentId := "anyPresent"
+	// This is a workaround for required fields in optional nested objects
+	// i.e. if all missing, object is missing therefore okay
 	anyPresent := Unused(func() jen.Code { return jen.Id(anyPresentId) })
 	for _, field := range n.Fields {
 		if update && !field.Updatable {

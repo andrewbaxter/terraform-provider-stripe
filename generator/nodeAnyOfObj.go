@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-
 	"github.com/dave/jennifer/jen"
 )
 
@@ -47,7 +45,6 @@ func (n *NodeAnyOfObjs) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tf
 			panic("ASSERTION") // no identifiable fields for variant
 		}
 		optionStatements = append(optionStatements, jen.If(cond).Block(
-			jen.Comment(fmt.Sprintf("XXX %#v %t", cond, cond == nil)),
 			jen.Return(o.ValidateSetApi(
 				update,
 				Unused(func() jen.Code { return jen.Id("path") }),
