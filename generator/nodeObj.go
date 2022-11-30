@@ -35,7 +35,11 @@ func (n *NodeObj) genFieldInner(outFields jen.Dict, flattenParentOptional bool, 
 		} else {
 			fieldOut := field.Spec.GenField()
 			fieldOut[jen.Id("Description")] = jen.Lit(field.Description)
-			switch field.Behavior {
+			behavior := field.Behavior
+			if flattenParentOptional && behavior == NBUserRequired {
+				behavior = NBUserOptional
+			}
+			switch behavior {
 			case NBUserRequired:
 				fieldOut[jen.Id("Required")] = jen.True()
 				if !field.Updatable {
