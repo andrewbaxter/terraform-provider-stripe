@@ -74,3 +74,7 @@ func (n *NodeFakeMap) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSo
 func (n *NodeFakeMap) IsNotDefault(id jen.Code) jen.Code {
 	return jen.Len(jen.Add(id).Assert(jen.Index().Any())).Op(">").Lit(0)
 }
+
+func (n *NodeFakeMap) CanRead() bool {
+	return n.Elem.CanRead()
+}

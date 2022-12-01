@@ -77,3 +77,7 @@ func (n *NodeArray) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSour
 func (n *NodeArray) IsNotDefault(id jen.Code) jen.Code {
 	return jen.Len(jen.Add(id).Assert(jen.Index().Any())).Op(">").Lit(0)
 }
+
+func (n *NodeArray) CanRead() bool {
+	return n.Elem.CanRead()
+}

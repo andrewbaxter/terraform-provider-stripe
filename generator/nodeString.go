@@ -58,3 +58,7 @@ func (n *NodeString) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSou
 func (n *NodeString) IsNotDefault(id jen.Code) jen.Code {
 	return jen.Add(id).Assert(jen.String()).Op("!=").Lit("")
 }
+
+func (n *NodeString) CanRead() bool {
+	return true
+}

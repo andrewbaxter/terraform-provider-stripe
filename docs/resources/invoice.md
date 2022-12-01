@@ -28,8 +28,9 @@ description: |-
 - `days_until_due` (Number) The number of days from when the invoice is created until it is due. Valid only for invoices where `collection_method=send_invoice`.
 - `default_payment_method` (String) ID of the default payment method for the invoice. It must belong to the customer associated with the invoice. If not set, defaults to the subscription's default payment method, if any, or to the default payment method in the customer's invoice settings.
 - `default_source` (String) ID of the default payment source for the invoice. It must belong to the customer associated with the invoice and be in a chargeable state. If not set, defaults to the subscription's default source, if any, or to the customer's default source.
+- `default_tax_rates` (List of String) The tax rates that will apply to any line item that does not have `tax_rates` set.
 - `description` (String) An arbitrary string attached to the object. Often useful for displaying to users. Referenced as 'memo' in the Dashboard.
-- `discounts` (List of String) The coupons to redeem into discounts for the invoice. If not specified, inherits the discount from the invoice's customer. Pass an empty string to avoid inheriting any discounts.
+- `discounts` (Block List) The coupons to redeem into discounts for the invoice. If not specified, inherits the discount from the invoice's customer. Pass an empty string to avoid inheriting any discounts. (see [below for nested schema](#nestedblock--discounts))
 - `due_date` (Number) The date on which payment for this invoice is due. Valid only for invoices where `collection_method=send_invoice`.
 - `footer` (String) Footer to be displayed on the invoice.
 - `from_invoice_action` (String) The relation between this invoice and the cloned invoice
@@ -92,7 +93,6 @@ description: |-
 - `customer_shipping_tracking_number` (String) The tracking number for a physical product, obtained from the delivery service. If multiple tracking numbers were generated for this purchase, please separate them with commas.
 - `customer_tax_exempt` (String) The customer's tax exempt status. Until the invoice is finalized, this field will equal `customer.tax_exempt`. Once the invoice is finalized, this field will no longer be updated.
 - `customer_tax_ids` (List of Object) The customer's tax IDs. Until the invoice is finalized, this field will contain the same tax IDs as `customer.tax_ids`. Once the invoice is finalized, this field will no longer be updated. (see [below for nested schema](#nestedatt--customer_tax_ids))
-- `default_tax_rates` (Block List) The tax rates that will apply to any line item that does not have `tax_rates` set. (see [below for nested schema](#nestedblock--default_tax_rates))
 - `discount_checkout_session` (String) The Checkout session that this coupon is applied to, if it is applied to a particular session in payment mode. Will not be present for subscription mode.
 - `discount_coupon_amount_off` (Number) Amount (in the `currency` specified) that will be taken off the subtotal of any invoices for this customer.
 - `discount_coupon_applies_to_products` (List of String) A list of product IDs this coupon applies to
@@ -170,6 +170,28 @@ Required:
 - `value` (String) The value of the custom field.
 
 
+<a id="nestedblock--discounts"></a>
+### Nested Schema for `discounts`
+
+Optional:
+
+- `coupon` (String)
+- `discount` (String)
+
+Read-Only:
+
+- `checkout_session` (String) The Checkout session that this coupon is applied to, if it is applied to a particular session in payment mode. Will not be present for subscription mode.
+- `customer` (String) The ID of the customer associated with this discount.
+- `deleted` (Boolean) Always true for a deleted object
+- `id` (String) The ID of the discount object. Discounts cannot be fetched by ID. Use `expand[]=discounts` in API calls to expand discount IDs in an array.
+- `invoice` (String) The invoice that the discount's coupon was applied to, if it was applied directly to a particular invoice.
+- `invoice_item` (String) The invoice item `id` (or invoice line item `id` for invoice line items of type='subscription') that the discount's coupon was applied to, if it was applied directly to a particular invoice item or invoice line item.
+- `object` (String) String representing the object's type. Objects of the same type share the same value.
+- `promotion_code` (String) The promotion code applied to create this discount.
+- `start` (Number) Date that the coupon was applied.
+- `subscription` (String) The subscription that this coupon is applied to, if it is applied to a particular subscription.
+
+
 <a id="nestedatt--customer_tax_ids"></a>
 ### Nested Schema for `customer_tax_ids`
 
@@ -177,27 +199,6 @@ Read-Only:
 
 - `type` (String)
 - `value` (String)
-
-
-<a id="nestedblock--default_tax_rates"></a>
-### Nested Schema for `default_tax_rates`
-
-Read-Only:
-
-- `active` (Boolean) Defaults to `true`. When set to `false`, this tax rate cannot be used with new applications or Checkout Sessions, but will still work for subscriptions and invoices that already have it set.
-- `country` (String) Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
-- `created` (Number) Time at which the object was created. Measured in seconds since the Unix epoch.
-- `description` (String) An arbitrary string attached to the tax rate for your internal use only. It will not be visible to your customers.
-- `display_name` (String) The display name of the tax rates as it will appear to your customer on their receipt email, PDF, and the hosted invoice page.
-- `id` (String) Unique identifier for the object.
-- `inclusive` (Boolean) This specifies if the tax rate is inclusive or exclusive.
-- `jurisdiction` (String) The jurisdiction for the tax rate. You can use this label field for tax reporting purposes. It also appears on your customer’s invoice.
-- `livemode` (Boolean) Has the value `true` if the object exists in live mode or the value `false` if the object exists in test mode.
-- `metadata` (Map of String) Set of [key-value pairs](https://stripe.com/docs/api/metadata) that you can attach to an object. This can be useful for storing additional information about the object in a structured format.
-- `object` (String) String representing the object's type. Objects of the same type share the same value.
-- `percentage` (Number) This represents the tax rate percent out of 100.
-- `state` (String) [ISO 3166-2 subdivision code](https://en.wikipedia.org/wiki/ISO_3166-2:US), without country prefix. For example, "NY" for New York, United States.
-- `tax_type` (String) The high-level tax type, such as `vat` or `sales_tax`.
 
 
 <a id="nestedatt--discount_coupon_currency_options"></a>

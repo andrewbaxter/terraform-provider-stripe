@@ -33,39 +33,39 @@ description: |-
 - `business_profile_support_url` (String) A publicly available website for handling support issues.
 - `business_profile_url` (String) The business's publicly available website.
 - `business_type` (String) The business type.
-- `capabilities_acss_debit_payments` (String) The status of the Canadian pre-authorized debits payments capability of the account, or whether the account can directly process Canadian pre-authorized debits charges.
-- `capabilities_affirm_payments` (String) The status of the Affirm capability of the account, or whether the account can directly process Affirm charges.
-- `capabilities_afterpay_clearpay_payments` (String) The status of the Afterpay Clearpay capability of the account, or whether the account can directly process Afterpay Clearpay charges.
-- `capabilities_au_becs_debit_payments` (String) The status of the BECS Direct Debit (AU) payments capability of the account, or whether the account can directly process BECS Direct Debit (AU) charges.
-- `capabilities_bacs_debit_payments` (String) The status of the Bacs Direct Debits payments capability of the account, or whether the account can directly process Bacs Direct Debits charges.
-- `capabilities_bancontact_payments` (String) The status of the Bancontact payments capability of the account, or whether the account can directly process Bancontact charges.
-- `capabilities_bank_transfer_payments` (String) The status of the customer_balance payments capability of the account, or whether the account can directly process customer_balance charges.
-- `capabilities_blik_payments` (String) The status of the blik payments capability of the account, or whether the account can directly process blik charges.
-- `capabilities_boleto_payments` (String) The status of the boleto payments capability of the account, or whether the account can directly process boleto charges.
-- `capabilities_card_issuing` (String) The status of the card issuing capability of the account, or whether you can use Issuing to distribute funds on cards
-- `capabilities_card_payments` (String) The status of the card payments capability of the account, or whether the account can directly process credit and debit card charges.
-- `capabilities_cartes_bancaires_payments` (String) The status of the Cartes Bancaires payments capability of the account, or whether the account can directly process Cartes Bancaires card charges in EUR currency.
-- `capabilities_eps_payments` (String) The status of the EPS payments capability of the account, or whether the account can directly process EPS charges.
-- `capabilities_fpx_payments` (String) The status of the FPX payments capability of the account, or whether the account can directly process FPX charges.
-- `capabilities_giropay_payments` (String) The status of the giropay payments capability of the account, or whether the account can directly process giropay charges.
-- `capabilities_grabpay_payments` (String) The status of the GrabPay payments capability of the account, or whether the account can directly process GrabPay charges.
-- `capabilities_ideal_payments` (String) The status of the iDEAL payments capability of the account, or whether the account can directly process iDEAL charges.
-- `capabilities_jcb_payments` (String) The status of the JCB payments capability of the account, or whether the account (Japan only) can directly process JCB credit card charges in JPY currency.
-- `capabilities_klarna_payments` (String) The status of the Klarna payments capability of the account, or whether the account can directly process Klarna charges.
-- `capabilities_konbini_payments` (String) The status of the konbini payments capability of the account, or whether the account can directly process konbini charges.
-- `capabilities_legacy_payments` (String) The status of the legacy payments capability of the account.
-- `capabilities_link_payments` (String) The status of the link_payments capability of the account, or whether the account can directly process Link charges.
-- `capabilities_oxxo_payments` (String) The status of the OXXO payments capability of the account, or whether the account can directly process OXXO charges.
-- `capabilities_p24_payments` (String) The status of the P24 payments capability of the account, or whether the account can directly process P24 charges.
-- `capabilities_paynow_payments` (String) The status of the paynow payments capability of the account, or whether the account can directly process paynow charges.
-- `capabilities_promptpay_payments` (String) The status of the promptpay payments capability of the account, or whether the account can directly process promptpay charges.
-- `capabilities_sepa_debit_payments` (String) The status of the SEPA Direct Debits payments capability of the account, or whether the account can directly process SEPA Direct Debits charges.
-- `capabilities_sofort_payments` (String) The status of the Sofort payments capability of the account, or whether the account can directly process Sofort charges.
-- `capabilities_tax_reporting_us_1099_k` (String) The status of the tax reporting 1099-K (US) capability of the account.
-- `capabilities_tax_reporting_us_1099_misc` (String) The status of the tax reporting 1099-MISC (US) capability of the account.
-- `capabilities_transfers` (String) The status of the transfers capability of the account, or whether your platform can transfer funds to the account.
-- `capabilities_treasury` (String) The status of the banking capability, or whether the account can have bank accounts.
-- `capabilities_us_bank_account_ach_payments` (String) The status of the US bank account ACH payments capability of the account, or whether the account can directly process US bank account charges.
+- `capabilities_acss_debit_payments_requested` (Boolean)
+- `capabilities_affirm_payments_requested` (Boolean)
+- `capabilities_afterpay_clearpay_payments_requested` (Boolean)
+- `capabilities_au_becs_debit_payments_requested` (Boolean)
+- `capabilities_bacs_debit_payments_requested` (Boolean)
+- `capabilities_bancontact_payments_requested` (Boolean)
+- `capabilities_bank_transfer_payments_requested` (Boolean)
+- `capabilities_blik_payments_requested` (Boolean)
+- `capabilities_boleto_payments_requested` (Boolean)
+- `capabilities_card_issuing_requested` (Boolean)
+- `capabilities_card_payments_requested` (Boolean)
+- `capabilities_cartes_bancaires_payments_requested` (Boolean)
+- `capabilities_eps_payments_requested` (Boolean)
+- `capabilities_fpx_payments_requested` (Boolean)
+- `capabilities_giropay_payments_requested` (Boolean)
+- `capabilities_grabpay_payments_requested` (Boolean)
+- `capabilities_ideal_payments_requested` (Boolean)
+- `capabilities_jcb_payments_requested` (Boolean)
+- `capabilities_klarna_payments_requested` (Boolean)
+- `capabilities_konbini_payments_requested` (Boolean)
+- `capabilities_legacy_payments_requested` (Boolean)
+- `capabilities_link_payments_requested` (Boolean)
+- `capabilities_oxxo_payments_requested` (Boolean)
+- `capabilities_p24_payments_requested` (Boolean)
+- `capabilities_paynow_payments_requested` (Boolean)
+- `capabilities_promptpay_payments_requested` (Boolean)
+- `capabilities_sepa_debit_payments_requested` (Boolean)
+- `capabilities_sofort_payments_requested` (Boolean)
+- `capabilities_tax_reporting_us_1099_k_requested` (Boolean)
+- `capabilities_tax_reporting_us_1099_misc_requested` (Boolean)
+- `capabilities_transfers_requested` (Boolean)
+- `capabilities_treasury_requested` (Boolean)
+- `capabilities_us_bank_account_ach_payments_requested` (Boolean)
 - `company_address_city` (String) City, district, suburb, town, or village.
 - `company_address_country` (String) Two-letter country code ([ISO 3166-1 alpha-2](https://en.wikipedia.org/wiki/ISO_3166-1_alpha-2)).
 - `company_address_kana_city` (String) City/Ward.
@@ -179,7 +179,7 @@ description: |-
 - `settings_payments_statement_descriptor_kana` (String) The Kana variation of the default text that appears on credit card statements when a charge is made (Japan only)
 - `settings_payments_statement_descriptor_kanji` (String) The Kanji variation of the default text that appears on credit card statements when a charge is made (Japan only)
 - `settings_payouts_debit_negative_balances` (Boolean) A Boolean indicating if Stripe should try to reclaim negative balances from an attached bank account. See our [Understanding Connect Account Balances](https://stripe.com/docs/connect/account-balances) documentation for details. Default value is `false` for Custom accounts, otherwise `true`.
-- `settings_payouts_schedule_delay_days` (Number) The number of days charges for the account will be held before being paid out.
+- `settings_payouts_schedule_delay_days` (String) The number of days charges for the account will be held before being paid out.
 - `settings_payouts_schedule_interval` (String) How frequently funds will be paid out. One of `manual` (payouts only created via API call), `daily`, `weekly`, or `monthly`.
 - `settings_payouts_schedule_monthly_anchor` (Number) The day of the month funds will be paid out. Only shown if `interval` is monthly. Payouts scheduled between the 29th and 31st of the month are sent on the last day of shorter months.
 - `settings_payouts_schedule_weekly_anchor` (String) The day of the week funds will be paid out, of the style 'monday', 'tuesday', etc. Only shown if `interval` is weekly.

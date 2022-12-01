@@ -197,6 +197,7 @@ type Node interface {
 	// For objects, this means turning a flattened map into nested maps for nested object specs.
 	ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code
 	IsNotDefault(id jen.Code) jen.Code
+	CanRead() bool
 }
 
 var FixupFieldDefault = map[string]map[string]jen.Code{
@@ -205,22 +206,14 @@ var FixupFieldDefault = map[string]map[string]jen.Code{
 		"tax_behavior":   jen.Lit("unspecified"),
 	},
 }
-var FixupFieldString = map[string]bool{
-	"price/tiers/[]/up_to":                  true,
-	"price/currency_options/tiers/[]/up_to": true,
-}
 
 func BuildNode(
-	path []string,
 	seenRefs map[string]bool,
 	refs map[string]OpenApiObj,
 	createSpec any,
 	updateSpec any,
 	getSpec any,
 ) *Node {
-	if FixupFieldString[strings.Join(path, "/")] {
-		return shared.Pointer[Node](&NodeString{})
-	}
 	deref := func(s any) (any, string) {
 		if s == nil {
 			return nil, ""
@@ -232,10 +225,17 @@ func BuildNode(
 		elemName := Last(strings.Split(*ref, "/"))
 		return Reunmarshal[any](refs[elemName]), elemName
 	}
-	filterAnyOf := func(anyOf []any) []any {
+	filterAnyOf := func(anyOf []any, preferObj bool) []any {
+		// If there's a primitive + complex, prefer the primitive because it's probably
+		// a foreign key and we can create the complex elsewhere.
+		// Some bad data (i.e. enum with one empty element).
+		// preferObj - sometimes the read/update endpoints are missing data from create
+		// and we end up selecting a bad primitive we skipped on create; use this
+		// to match create when create found an obj.
 		filtered := []any{}
 		var anyPrim any = nil
 		str := false
+		var obj any = nil
 		allowedValues := []string{}
 		for _, sub := range anyOf {
 			sub, _ := deref(sub)
@@ -259,7 +259,7 @@ func BuildNode(
 					allowedValues = append(allowedValues, type_)
 				}
 			case "object":
-				// nop
+				obj = sub
 			case "array":
 				// nop
 			default:
@@ -267,7 +267,9 @@ func BuildNode(
 			}
 			filtered = append(filtered, sub)
 		}
-		if str {
+		if preferObj && obj != nil {
+			return []any{obj}
+		} else if str {
 			return []any{map[string]any{
 				"type":        "string",
 				"description": fmt.Sprintf("Allowed values: %s", strings.Join(allowedValues, ", ")),
@@ -310,21 +312,22 @@ func BuildNode(
 			seenRefs[ref_] = true
 		}
 	}
-	deanyof := func(s any) any {
+	deanyof := func(s any, preferObj bool) any {
 		// get rid of weird mismatches where create is obj, get is anyof with 1 obj option
 		if s == nil {
 			return nil
 		}
 		anyof := shared.Dig[[]any](s, "anyOf")
-		anyof = filterAnyOf(anyof)
+		anyof = filterAnyOf(anyof, preferObj)
 		if len(anyof) == 1 {
 			return anyof[0]
 		}
 		return s
 	}
-	createSpec = deanyof(createSpec)
-	updateSpec = deanyof(updateSpec)
-	getSpec = deanyof(getSpec)
+	createSpec = deanyof(createSpec, false)
+	createSpecObj := createSpec != nil && shared.Dig[string](createSpec, "type") == "object"
+	updateSpec = deanyof(updateSpec, createSpecObj)
+	getSpec = deanyof(getSpec, createSpecObj)
 	{
 		ref_ := ""
 		if s, ref := deref(createSpec); ref != "" {
@@ -368,18 +371,8 @@ func BuildNode(
 	var type_ = ""
 	if createSpec != nil {
 		type_ = shared.Dig[string](createSpec, "type")
-	}
-	var getType_ = ""
-	if getSpec != nil {
+	} else if getSpec != nil {
 		type_ = shared.Dig[string](getSpec, "type")
-		if type_ == "" {
-			type_ = getType_
-		}
-	}
-	if type_ != "" && getType_ != "" && type_ != getType_ {
-		// bad spec design
-		log.Printf("Node with mismatched types %s and %s, skipping", type_, getType_)
-		return nil
 	}
 	if type_ == "" {
 		m := func(s any) []any {
@@ -388,9 +381,9 @@ func BuildNode(
 			}
 			return shared.Dig[[]any](s, "anyOf")
 		}
-		createAnyOf := filterAnyOf(m(createSpec))
-		updateAnyOf := filterAnyOf(m(updateSpec))
-		getAnyOf := filterAnyOf(m(getSpec))
+		createAnyOf := filterAnyOf(m(createSpec), false)
+		updateAnyOf := filterAnyOf(m(updateSpec), false)
+		getAnyOf := filterAnyOf(m(getSpec), false)
 		if createAnyOf != nil || getAnyOf != nil {
 			type El struct {
 				Create any // not nil
@@ -422,7 +415,7 @@ func BuildNode(
 			if allObj {
 				options := []*NodeObj{}
 				for _, o := range filtered {
-					node := BuildNode(path, seenRefs, refs, o.Create, o.Update, o.Get)
+					node := BuildNode(seenRefs, refs, o.Create, o.Update, o.Get)
 					if node == nil {
 						continue
 					}
@@ -491,7 +484,7 @@ func BuildNode(
 					createRequired[paramName] = true
 				}
 				for propName, prop := range createSpec.Properties {
-					propNode := BuildNode(append(path, propName), seenRefs, refs, prop, updateFields[propName], getFields[propName])
+					propNode := BuildNode(seenRefs, refs, prop, updateFields[propName], getFields[propName])
 					if propNode == nil {
 						continue
 					}
@@ -522,7 +515,7 @@ func BuildNode(
 					}
 					continue
 				}
-				propNode := BuildNode(append(path, propName), seenRefs, refs, nil, updateFields[propName], getFields[propName])
+				propNode := BuildNode(seenRefs, refs, nil, updateFields[propName], getFields[propName])
 				if propNode == nil {
 					continue
 				}
@@ -557,7 +550,6 @@ func BuildNode(
 				return s.AdditionalProperties
 			}
 			elem := BuildNode(
-				path,
 				seenRefs,
 				refs,
 				m(createSpec),
@@ -588,7 +580,7 @@ func BuildNode(
 			}
 			return Reunmarshal[OpenApiArray](s).Items
 		}
-		elem := BuildNode(append(path, "[]"), seenRefs, refs, m(createSpec), m(updateSpec), m(getSpec))
+		elem := BuildNode(seenRefs, refs, m(createSpec), m(updateSpec), m(getSpec))
 		if elem == nil {
 			return nil
 		}
@@ -670,7 +662,6 @@ func main() {
 			continue
 		}
 		fields := (*BuildNode(
-			[]string{objName},
 			map[string]bool{},
 			spec.Components.Schemas,
 			post.RequestBody.Content.FormUrlencoded.Schema,

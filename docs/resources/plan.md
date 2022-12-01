@@ -48,7 +48,7 @@ description: |-
 
 Required:
 
-- `up_to` (Number) Up to and including to this quantity will be contained in the tier.
+- `up_to` (String) Up to and including to this quantity will be contained in the tier.
 
 Optional:
 

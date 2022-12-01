@@ -26,3 +26,7 @@ func (n *NodeInt) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 func (n *NodeInt) IsNotDefault(id jen.Code) jen.Code {
 	return jen.Add(id).Assert(jen.Int()).Op("!=").Lit(0)
 }
+
+func (n *NodeInt) CanRead() bool {
+	return true
+}

@@ -81,3 +81,12 @@ func (n *NodeAnyOfObjs) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tf
 func (n *NodeAnyOfObjs) IsNotDefault(id jen.Code) jen.Code {
 	return jen.True()
 }
+
+func (n *NodeAnyOfObjs) CanRead() bool {
+	for _, o := range n.Options {
+		if o.CanRead() {
+			return true
+		}
+	}
+	return false
+}

@@ -26,3 +26,7 @@ func (n *NodeFloat) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSour
 func (n *NodeFloat) IsNotDefault(id jen.Code) jen.Code {
 	return jen.Add(id).Assert(jen.Float64()).Op("!=").Lit(0.0)
 }
+
+func (n *NodeFloat) CanRead() bool {
+	return true
+}

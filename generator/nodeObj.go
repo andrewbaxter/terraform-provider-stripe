@@ -95,13 +95,10 @@ func (n *NodeObj) GenElem() jen.Code {
 func (n *NodeObj) readApiInner(apiSource jen.Code, tfDest TfDestColl) []jen.Code {
 	fields := []jen.Code{}
 	for _, field := range n.Fields {
-		if !field.Readable {
+		if !field.Readable || !field.Spec.CanRead() {
 			continue
 		}
 		if objField, isObj := field.Spec.(*NodeObj); isObj {
-			if !objField.checkAnyReadable() {
-				continue
-			}
 			// Flatten nested objects
 			fields = append(fields, objField.readApiFlat(
 				jen.Qual(SharedPkg, "DigAny").Call(apiSource, jen.Lit(field.Key)),
@@ -120,24 +117,6 @@ func (n *NodeObj) readApiInner(apiSource jen.Code, tfDest TfDestColl) []jen.Code
 		}
 	}
 	return fields
-}
-
-func (n *NodeObj) checkAnyReadable() bool {
-	for _, f := range n.Fields {
-		if !f.Readable {
-			continue
-		}
-
-		if objField, isObj := f.Spec.(*NodeObj); isObj {
-			if objField.checkAnyReadable() {
-				return true
-			}
-		} else {
-			return true
-		}
-	}
-
-	return false
 }
 
 func (n *NodeObj) readApiFlat(apiSource jen.Code, tfDest TfDestColl) []jen.Code {
@@ -309,4 +288,13 @@ func (n *NodeObj) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 
 func (n *NodeObj) IsNotDefault(id jen.Code) jen.Code {
 	return jen.True()
+}
+
+func (n *NodeObj) CanRead() bool {
+	for _, f := range n.Fields {
+		if f.Readable && f.Spec.CanRead() {
+			return true
+		}
+	}
+	return false
 }
