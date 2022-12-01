@@ -97,10 +97,6 @@ func Flatten[T any](x [][]T) []T {
 	return out
 }
 
-func P[T any](x T) *T {
-	return &x
-}
-
 type Usable[T any] struct {
 	used bool
 	f    func() T
@@ -200,6 +196,7 @@ type Node interface {
 	// Expression that checks the raw (any) value in tfSource and returns the value in the shape the api expects.
 	// For objects, this means turning a flattened map into nested maps for nested object specs.
 	ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code
+	IsNotDefault(id jen.Code) jen.Code
 }
 
 var FixupFieldDefault = map[string]map[string]jen.Code{
@@ -208,14 +205,22 @@ var FixupFieldDefault = map[string]map[string]jen.Code{
 		"tax_behavior":   jen.Lit("unspecified"),
 	},
 }
+var FixupFieldString = map[string]bool{
+	"price/tiers/[]/up_to":                  true,
+	"price/currency_options/tiers/[]/up_to": true,
+}
 
 func BuildNode(
+	path []string,
 	seenRefs map[string]bool,
 	refs map[string]OpenApiObj,
 	createSpec any,
 	updateSpec any,
 	getSpec any,
 ) *Node {
+	if FixupFieldString[strings.Join(path, "/")] {
+		return shared.Pointer[Node](&NodeString{})
+	}
 	deref := func(s any) (any, string) {
 		if s == nil {
 			return nil, ""
@@ -229,18 +234,30 @@ func BuildNode(
 	}
 	filterAnyOf := func(anyOf []any) []any {
 		filtered := []any{}
+		var anyPrim any = nil
+		str := false
+		allowedValues := []string{}
 		for _, sub := range anyOf {
 			sub, _ := deref(sub)
 			type_ := shared.Dig[string](sub, "type")
 			switch type_ {
 			case "integer", "number", "boolean":
-				return []any{sub}
+				anyPrim = sub
+				allowedValues = append(allowedValues, type_)
 			case "string":
 				enum := shared.Dig[[]any](sub, "enum")
 				if enum != nil && len(enum) == 1 && enum[0].(string) == "" {
 					continue
 				}
-				return []any{sub}
+				str = true
+				anyPrim = sub
+				if len(enum) > 0 {
+					for _, e := range enum {
+						allowedValues = append(allowedValues, fmt.Sprintf("\"%s\"", e.(string)))
+					}
+				} else {
+					allowedValues = append(allowedValues, type_)
+				}
 			case "object":
 				// nop
 			case "array":
@@ -250,7 +267,16 @@ func BuildNode(
 			}
 			filtered = append(filtered, sub)
 		}
-		return filtered
+		if str {
+			return []any{map[string]any{
+				"type":        "string",
+				"description": fmt.Sprintf("Allowed values: %s", strings.Join(allowedValues, ", ")),
+			}}
+		} else if anyPrim != nil {
+			return []any{anyPrim}
+		} else {
+			return filtered
+		}
 	}
 
 	{
@@ -396,7 +422,7 @@ func BuildNode(
 			if allObj {
 				options := []*NodeObj{}
 				for _, o := range filtered {
-					node := BuildNode(seenRefs, refs, o.Create, o.Update, o.Get)
+					node := BuildNode(path, seenRefs, refs, o.Create, o.Update, o.Get)
 					if node == nil {
 						continue
 					}
@@ -407,13 +433,13 @@ func BuildNode(
 					options = append(options, objNode)
 				}
 				if len(options) == 1 {
-					return P[Node](options[0])
+					return shared.Pointer[Node](options[0])
 				}
 				if len(options) == 0 {
 					log.Printf("AnyOf field with no viable options, skipping")
 					return nil
 				}
-				return P[Node](&NodeAnyOfObjs{
+				return shared.Pointer[Node](&NodeAnyOfObjs{
 					Options: options,
 				})
 			}
@@ -429,21 +455,21 @@ func BuildNode(
 			spec = Reunmarshal[OpenApiString](getSpec)
 		}
 		enum := spec.Enum
-		return P[Node](&NodeString{
+		return shared.Pointer[Node](&NodeString{
 			Enum: enum,
 		})
 	case "boolean":
-		return P[Node](&NodeBool{})
+		return shared.Pointer[Node](&NodeBool{})
 	case "integer":
-		return P[Node](&NodeInt{})
+		return shared.Pointer[Node](&NodeInt{})
 	case "number":
-		return P[Node](&NodeFloat{})
+		return shared.Pointer[Node](&NodeFloat{})
 	case "object":
 		m := func(s any) *OpenApiObj {
 			if s == nil {
 				return nil
 			}
-			return P(Reunmarshal[OpenApiObj](s))
+			return shared.Pointer(Reunmarshal[OpenApiObj](s))
 		}
 		createSpec := m(createSpec)
 		updateSpec := m(updateSpec)
@@ -465,7 +491,7 @@ func BuildNode(
 					createRequired[paramName] = true
 				}
 				for propName, prop := range createSpec.Properties {
-					propNode := BuildNode(seenRefs, refs, prop, updateFields[propName], getFields[propName])
+					propNode := BuildNode(append(path, propName), seenRefs, refs, prop, updateFields[propName], getFields[propName])
 					if propNode == nil {
 						continue
 					}
@@ -496,7 +522,7 @@ func BuildNode(
 					}
 					continue
 				}
-				propNode := BuildNode(seenRefs, refs, nil, updateFields[propName], getFields[propName])
+				propNode := BuildNode(append(path, propName), seenRefs, refs, nil, updateFields[propName], getFields[propName])
 				if propNode == nil {
 					continue
 				}
@@ -520,7 +546,7 @@ func BuildNode(
 				return fields[i].Key < fields[j].Key
 			})
 
-			return P[Node](&NodeObj{
+			return shared.Pointer[Node](&NodeObj{
 				Fields: fields,
 			})
 		} else if (createSpec != nil && createSpec.AdditionalProperties != nil) || (getSpec != nil && getSpec.AdditionalProperties != nil) {
@@ -531,6 +557,7 @@ func BuildNode(
 				return s.AdditionalProperties
 			}
 			elem := BuildNode(
+				path,
 				seenRefs,
 				refs,
 				m(createSpec),
@@ -542,11 +569,11 @@ func BuildNode(
 			}
 			if objElem, isObj := (*elem).(*NodeObj); isObj {
 				objElem.FakeMapField = true
-				return P[Node](&NodeFakeMap{
+				return shared.Pointer[Node](&NodeFakeMap{
 					Elem: *elem,
 				})
 			} else {
-				return P[Node](&NodeMap{
+				return shared.Pointer[Node](&NodeMap{
 					Elem: *elem,
 				})
 			}
@@ -561,11 +588,11 @@ func BuildNode(
 			}
 			return Reunmarshal[OpenApiArray](s).Items
 		}
-		elem := BuildNode(seenRefs, refs, m(createSpec), m(updateSpec), m(getSpec))
+		elem := BuildNode(append(path, "[]"), seenRefs, refs, m(createSpec), m(updateSpec), m(getSpec))
 		if elem == nil {
 			return nil
 		}
-		return P[Node](&NodeArray{
+		return shared.Pointer[Node](&NodeArray{
 			Elem: *elem,
 		})
 	default:
@@ -643,6 +670,7 @@ func main() {
 			continue
 		}
 		fields := (*BuildNode(
+			[]string{objName},
 			map[string]bool{},
 			spec.Components.Schemas,
 			post.RequestBody.Content.FormUrlencoded.Schema,

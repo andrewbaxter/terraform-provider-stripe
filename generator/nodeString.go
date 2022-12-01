@@ -42,12 +42,19 @@ func (n *NodeString) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSou
 					)...),
 				),
 			).Block(jen.Id("out").Op("=").Id("append").Call(jen.Id("out"), jen.Qual(DiagPkg, "Diagnostic").Values(jen.Dict{
-				jen.Id("Severity"):      jen.Qual(DiagPkg, "Error"),
-				jen.Id("Summary"):       jen.Qual("fmt", "Sprintf").Call(jen.Lit(fmt.Sprintf("Field must be one of: %s", strings.Join(n.Enum, ", ")))),
+				jen.Id("Severity"): jen.Qual(DiagPkg, "Error"),
+				jen.Id("Summary"): jen.Qual("fmt", "Sprintf").Call(
+					jen.Lit(fmt.Sprintf("Field must be one of: %s (at %%s)", strings.Join(n.Enum, ", "))),
+					jen.Id("fmtPath").Call(tfPath.Use()),
+				),
 				jen.Id("AttributePath"): tfPath.Use(),
 			}))),
 		)
 	}
 	statements = append(statements, jen.Return(jen.Id(tfSourceId)))
 	return FakeScope(jen.Any(), statements)
+}
+
+func (n *NodeString) IsNotDefault(id jen.Code) jen.Code {
+	return jen.Add(id).Assert(jen.String()).Op("!=").Lit("")
 }

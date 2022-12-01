@@ -1,6 +1,9 @@
 package main
 
-import "github.com/dave/jennifer/jen"
+import (
+	"github.com/andrewbaxter/terraform-provider-stripe/shared"
+	"github.com/dave/jennifer/jen"
+)
 
 type NodeMap struct {
 	Elem Node
@@ -29,7 +32,7 @@ func (n *NodeMap) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 				{
 					jen.Id("outerDest").Op(":=").Id(tfDestId),
 				},
-				n.Elem.ReadApi(jen.Id("v"), P(MapTfDestVal{
+				n.Elem.ReadApi(jen.Id("v"), shared.Pointer(MapTfDestVal{
 					Base: "outerDest",
 					Key:  jen.Id("k"),
 				})),
@@ -42,7 +45,7 @@ func (n *NodeMap) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 func (n *NodeMap) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code {
 	apiDestId := "dest"
 	childPath := Unused(func() jen.Code { return jen.Id("path").Dot("IndexString").Call(jen.Id("k")) })
-	validate := n.Elem.ValidateSetApi(update, childPath, P(AnyTfSourceVal("v")))
+	validate := n.Elem.ValidateSetApi(update, childPath, shared.Pointer(AnyTfSourceVal("v")))
 	pre := []jen.Code{
 		jen.Comment("NodeMap ValidateSetApi"),
 	}
@@ -68,4 +71,8 @@ func (n *NodeMap) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 			},
 		}),
 	)
+}
+
+func (n *NodeMap) IsNotDefault(id jen.Code) jen.Code {
+	return jen.Len(jen.Add(id).Assert(jen.Map(jen.String()).Any())).Op(">").Lit(0)
 }

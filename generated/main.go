@@ -93,7 +93,6 @@ type Facilitator struct {
 
 func (f *Facilitator) Post(ctx context.Context, path string, data any) (any, error) {
 	f.limit.Take()
-	log.Printf("STRIPE POST %s\n%s", path, Json(data))
 	res, err := f.c.R().
 		SetHeader(HeaderIdempotencyKey, stripe.NewIdempotencyKey()).
 		SetFormDataFromValues(shared.Must(f.enc.Encode(data.(map[string]any)))).
@@ -169,4 +168,19 @@ func fmtPath(path cty.Path) string {
 		out = append(out, "/"+k0.Key.AsString())
 	}
 	return strings.Join(out, "")
+}
+
+func NewMutList[T any]() *MutList[T] {
+	return shared.Pointer(MutList[T]([]T{}))
+}
+
+type MutList[T any] []T
+
+func (m *MutList[T]) Add(v T) {
+	(*m) = append(*m, v)
+}
+
+func IsNotDefault[T comparable](v T) bool {
+	var d T
+	return v == d
 }

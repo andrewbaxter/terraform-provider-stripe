@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/andrewbaxter/terraform-provider-stripe/shared"
 	"github.com/dave/jennifer/jen"
 )
 
@@ -250,11 +251,12 @@ func (n *NodeObj) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 		} else {
 			// Normal fields
 			childChildPath := Unused(func() jen.Code { return jen.Id("path") })
-			if_ := jen.If(jen.List(jen.Id("v"), jen.Id("vOk")).Op(":=").Add(tfSource.Field(field.Key).GetOk()).Op(";").Id("vOk")).Block(
+			if_ := jen.If(jen.List(jen.Id("v"), jen.Id("vOk")).Op(":=").Add(tfSource.Field(field.Key).GetOk()).
+				Op(";").Id("vOk").Op("&&").Add(field.Spec.IsNotDefault(jen.Id("v")))).Block(
 				jen.Id(apiDestId).Index(jen.Lit(field.Key)).Op("=").Add(field.Spec.ValidateSetApi(
 					update,
 					childChildPath,
-					P(AnyTfSourceVal("v")),
+					shared.Pointer(AnyTfSourceVal("v")),
 				)),
 			)
 			if field.Behavior == NBUserRequired {
@@ -303,4 +305,8 @@ func (n *NodeObj) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 			},
 		}),
 	)
+}
+
+func (n *NodeObj) IsNotDefault(id jen.Code) jen.Code {
+	return jen.True()
 }

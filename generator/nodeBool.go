@@ -22,3 +22,7 @@ func (n *NodeBool) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 func (n *NodeBool) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code {
 	return tfSource.Get()
 }
+
+func (n *NodeBool) IsNotDefault(id jen.Code) jen.Code {
+	return jen.Add(id).Assert(jen.Bool())
+}

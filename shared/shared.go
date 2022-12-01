@@ -2,6 +2,10 @@ package shared
 
 import "fmt"
 
+func Pointer[T any](x T) *T {
+	return &x
+}
+
 func Must[T any](x T, err error) T {
 	if err != nil {
 		panic(err)

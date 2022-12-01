@@ -1,6 +1,9 @@
 package main
 
-import "github.com/dave/jennifer/jen"
+import (
+	"github.com/andrewbaxter/terraform-provider-stripe/shared"
+	"github.com/dave/jennifer/jen"
+)
 
 type NodeFakeMap struct {
 	Elem Node
@@ -28,7 +31,7 @@ func (n *NodeFakeMap) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 			{
 				jen.Id("outerDest").Op(":=").Id(tfDestId),
 			},
-			n.Elem.ReadApi(jen.Id("v"), P(ArrayTfDestVal("outerDest"))),
+			n.Elem.ReadApi(jen.Id("v"), shared.Pointer(ArrayTfDestVal("outerDest"))),
 		})...),
 		tfDest.Set(jen.Id(tfDestId)),
 		jen.Comment("NodeFakeMap ReadApi END"),
@@ -39,7 +42,7 @@ func (n *NodeFakeMap) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSo
 	tfSourceId := "outerSource"
 	apiDestId := "dest"
 	childPath := Unused(func() jen.Code { return jen.Add(tfPath.Use()).Dot("IndexInt").Call(jen.Id("i")) })
-	validate := n.Elem.ValidateSetApi(update, childPath, P(AnyTfSourceVal("v")))
+	validate := n.Elem.ValidateSetApi(update, childPath, shared.Pointer(AnyTfSourceVal("v")))
 	pre := []jen.Code{
 		jen.Comment("NodeFakeMap ValidateSetApi"),
 	}
@@ -66,4 +69,8 @@ func (n *NodeFakeMap) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSo
 			},
 		}),
 	)
+}
+
+func (n *NodeFakeMap) IsNotDefault(id jen.Code) jen.Code {
+	return jen.Len(jen.Add(id).Assert(jen.Index().Any())).Op(">").Lit(0)
 }
