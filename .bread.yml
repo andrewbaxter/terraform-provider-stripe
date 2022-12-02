@@ -1,0 +1,12 @@
+!v1
+weights:
+  accounts:
+    0: 100
+  projects:
+    https://github.com/hashicorp/terraform-plugin-sdk/v2: 100
+    https://github.com/stripe/stripe-go/v74: 100
+    https://github.com/hashicorp/go-cty: 100
+    https://github.com/go-playground/form/v4: 100
+    https://github.com/dave/jennifer: 100
+    https://go.uber.org/ratelimit: 100
+    https://github.com/go-resty/resty/v2: 100
