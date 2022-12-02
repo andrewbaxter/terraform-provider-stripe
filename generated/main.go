@@ -93,6 +93,7 @@ type Facilitator struct {
 
 func (f *Facilitator) Post(ctx context.Context, path string, data any) (any, error) {
 	f.limit.Take()
+	log.Printf("STRIPE POST %s\n%s\n-> %s", path, Json(data), shared.Must(f.enc.Encode(data.(map[string]any))).Encode())
 	res, err := f.c.R().
 		SetHeader(HeaderIdempotencyKey, stripe.NewIdempotencyKey()).
 		SetFormDataFromValues(shared.Must(f.enc.Encode(data.(map[string]any)))).
