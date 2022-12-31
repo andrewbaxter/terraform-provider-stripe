@@ -73,5 +73,5 @@ func (d *RootTfDestVal) Set(value jen.Code) jen.Code {
 type ArrayTfDestVal string
 
 func (d *ArrayTfDestVal) Set(val jen.Code) jen.Code {
-	return jen.Id(string(*d)).Op("=").Append(jen.Id(string(*d)), val)
+	return jen.Op("*").Id(string(*d)).Op("=").Append(jen.Op("*").Id(string(*d)), val)
 }

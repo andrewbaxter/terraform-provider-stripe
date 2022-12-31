@@ -200,11 +200,26 @@ type Node interface {
 	CanRead() bool
 }
 
-var FixupFieldDefault = map[string]map[string]jen.Code{
+var FixupFieldDefault = map[string]map[string]any{
 	"price": {
 		"billing_scheme": jen.Lit("per_unit"),
 		"tax_behavior":   jen.Lit("unspecified"),
 	},
+	"billing_portal_configuration": {
+		"features": map[string]any{
+			"subscription_update": map[string]any{
+				"proration_behavior": jen.Lit("none"),
+			},
+			"subscription_cancel": map[string]any{
+				"mode":               jen.Lit("at_period_end"),
+				"proration_behavior": jen.Lit("none"),
+			},
+		},
+	},
+}
+
+var FixupDeactivate = map[string]bool{
+	"product": true,
 }
 
 func BuildNode(
@@ -213,6 +228,7 @@ func BuildNode(
 	createSpec any,
 	updateSpec any,
 	getSpec any,
+	defaults map[string]any,
 ) *Node {
 	deref := func(s any) (any, string) {
 		if s == nil {
@@ -415,7 +431,7 @@ func BuildNode(
 			if allObj {
 				options := []*NodeObj{}
 				for _, o := range filtered {
-					node := BuildNode(seenRefs, refs, o.Create, o.Update, o.Get)
+					node := BuildNode(seenRefs, refs, o.Create, o.Update, o.Get, defaults)
 					if node == nil {
 						continue
 					}
@@ -476,6 +492,7 @@ func BuildNode(
 		updateFields := m1(updateSpec)
 		getFields := m1(getSpec)
 		if (createSpec != nil && len(createSpec.Properties) > 0) || len(getFields) > 0 {
+			// obj
 			fields := []*NodeObjField{}
 			fieldsByKey := map[string]*NodeObjField{}
 			if createSpec != nil {
@@ -484,7 +501,15 @@ func BuildNode(
 					createRequired[paramName] = true
 				}
 				for propName, prop := range createSpec.Properties {
-					propNode := BuildNode(seenRefs, refs, prop, updateFields[propName], getFields[propName])
+					var defaultsColl map[string]any
+					var defaultsPrim jen.Code
+					switch d := defaults[propName].(type) {
+					case map[string]any:
+						defaultsColl = d
+					case jen.Code:
+						defaultsPrim = d
+					}
+					propNode := BuildNode(seenRefs, refs, prop, updateFields[propName], getFields[propName], defaultsColl)
 					if propNode == nil {
 						continue
 					}
@@ -500,6 +525,7 @@ func BuildNode(
 						Behavior:    behavior,
 						Updatable:   shared.InMap(propName, updateFields),
 						Readable:    shared.InMap(propName, getFields),
+						Default:     defaultsPrim,
 						Spec:        *propNode,
 					}
 					fields = append(fields, field)
@@ -515,7 +541,7 @@ func BuildNode(
 					}
 					continue
 				}
-				propNode := BuildNode(seenRefs, refs, nil, updateFields[propName], getFields[propName])
+				propNode := BuildNode(seenRefs, refs, nil, updateFields[propName], getFields[propName], nil)
 				if propNode == nil {
 					continue
 				}
@@ -543,6 +569,7 @@ func BuildNode(
 				Fields: fields,
 			})
 		} else if (createSpec != nil && createSpec.AdditionalProperties != nil) || (getSpec != nil && getSpec.AdditionalProperties != nil) {
+			// map
 			m := func(s *OpenApiObj) any {
 				if s == nil {
 					return nil
@@ -555,6 +582,7 @@ func BuildNode(
 				m(createSpec),
 				m(updateSpec),
 				m(getSpec),
+				nil,
 			)
 			if elem == nil {
 				return nil
@@ -580,7 +608,7 @@ func BuildNode(
 			}
 			return Reunmarshal[OpenApiArray](s).Items
 		}
-		elem := BuildNode(seenRefs, refs, m(createSpec), m(updateSpec), m(getSpec))
+		elem := BuildNode(seenRefs, refs, m(createSpec), m(updateSpec), m(getSpec), nil)
 		if elem == nil {
 			return nil
 		}
@@ -646,6 +674,11 @@ func main() {
 		}
 		objName := Last(strings.Split(post.Responses.R200.Content.Json.Schema.Ref, "/"))
 		objSpec := spec.Components.Schemas[objName]
+		collNameParts := []string{}
+		for _, seg := range strings.Split(objName, ".") {
+			collNameParts = append(collNameParts, FromSnake(seg)...)
+		}
+		collName := ToSnake(collNameParts)
 
 		var update any
 		{
@@ -656,6 +689,9 @@ func main() {
 		}
 
 		_, hasDelete := instanceMethods[path]["delete"]
+		if FixupDeactivate[objName] {
+			hasDelete = false // force use of active=false
+		}
 
 		if post.RequestBody.Content.FormUrlencoded.Schema == nil {
 			log.Printf("Skipping %s, no post schema", path)
@@ -667,6 +703,7 @@ func main() {
 			post.RequestBody.Content.FormUrlencoded.Schema,
 			update,
 			Reunmarshal[any](objSpec),
+			FixupFieldDefault[collName],
 		)).(*NodeObj)
 
 		hasActive := false
@@ -682,10 +719,6 @@ func main() {
 			}
 			if f.Updatable {
 				noneUpdatable = false
-			}
-			default_, hasDefault := FixupFieldDefault[objName][f.Key]
-			if hasDefault {
-				f.Default = default_
 			}
 		}
 		if idField == "" {
@@ -711,11 +744,6 @@ func main() {
 			}
 		})
 
-		collNameParts := []string{}
-		for _, seg := range strings.Split(objName, ".") {
-			collNameParts = append(collNameParts, FromSnake(seg)...)
-		}
-		collName := ToSnake(collNameParts)
 		facilId := "f"
 		getClientStmt := jen.Id(facilId).Op(":=").Id("f0").Assert(jen.Op("*").Id("Facilitator"))
 		createDiagStmt := jen.Id(DiagId).Op(":=").Qual(DiagPkg, "Diagnostics").Values(jen.Dict{})

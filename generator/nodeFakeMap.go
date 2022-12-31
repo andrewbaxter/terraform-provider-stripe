@@ -29,7 +29,7 @@ func (n *NodeFakeMap) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 		jen.Id(tfDestId).Op(":=").Index().Any().Values(),
 		jen.For(jen.List(jen.Id("k"), jen.Id("v")).Op(":=").Range().Id("outerSource")).Block(Flatten([][]jen.Code{
 			{
-				jen.Id("outerDest").Op(":=").Id(tfDestId),
+				jen.Id("outerDest").Op(":=").Op("&").Id(tfDestId),
 			},
 			n.Elem.ReadApi(jen.Id("v"), shared.Pointer(ArrayTfDestVal("outerDest"))),
 		})...),
