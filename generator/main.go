@@ -200,25 +200,48 @@ type Node interface {
 	CanRead() bool
 }
 
-var FixupFieldDefault = map[string]map[string]any{
+type Fixup struct {
+	Default       jen.Code
+	ConditionalOn string
+}
+
+var FixupFields = map[string]map[string]any{
 	"price": {
-		"billing_scheme": jen.Lit("per_unit"),
-		"tax_behavior":   jen.Lit("unspecified"),
+		"billing_scheme": Fixup{
+			Default: jen.Lit("per_unit"),
+		},
+		"tax_behavior": Fixup{
+			Default: jen.Lit("unspecified"),
+		},
 	},
 	"billing_portal_configuration": {
 		"features": map[string]any{
 			"subscription_update": map[string]any{
-				"proration_behavior": jen.Lit("none"),
+				"proration_behavior": Fixup{
+					Default: jen.Lit("none"),
+				},
 			},
 			"subscription_cancel": map[string]any{
-				"mode":               jen.Lit("at_period_end"),
-				"proration_behavior": jen.Lit("none"),
+				"mode": Fixup{
+					Default: jen.Lit("at_period_end"),
+				},
+				"proration_behavior": Fixup{
+					Default: jen.Lit("none"),
+				},
+				"cancellation_reason": map[string]any{
+					"options": Fixup{
+						ConditionalOn: "enabled",
+					},
+				},
 			},
 		},
 	},
 }
 
+// Even though there's a delete endpoint, ignore it and use the activate field
+// for a soft delete instead.
 var FixupDeactivate = map[string]bool{
+	// Can't delete unless all prices are deleted which is impossible.
 	"product": true,
 }
 
@@ -228,7 +251,7 @@ func BuildNode(
 	createSpec any,
 	updateSpec any,
 	getSpec any,
-	defaults map[string]any,
+	fixups map[string]any,
 ) *Node {
 	deref := func(s any) (any, string) {
 		if s == nil {
@@ -431,7 +454,7 @@ func BuildNode(
 			if allObj {
 				options := []*NodeObj{}
 				for _, o := range filtered {
-					node := BuildNode(seenRefs, refs, o.Create, o.Update, o.Get, defaults)
+					node := BuildNode(seenRefs, refs, o.Create, o.Update, o.Get, fixups)
 					if node == nil {
 						continue
 					}
@@ -503,11 +526,13 @@ func BuildNode(
 				for propName, prop := range createSpec.Properties {
 					var defaultsColl map[string]any
 					var defaultsPrim jen.Code
-					switch d := defaults[propName].(type) {
+					var conditionalOn string
+					switch d := fixups[propName].(type) {
 					case map[string]any:
 						defaultsColl = d
-					case jen.Code:
-						defaultsPrim = d
+					case Fixup:
+						defaultsPrim = d.Default
+						conditionalOn = d.ConditionalOn
 					}
 					propNode := BuildNode(seenRefs, refs, prop, updateFields[propName], getFields[propName], defaultsColl)
 					if propNode == nil {
@@ -520,13 +545,14 @@ func BuildNode(
 						behavior = NBUserOptional
 					}
 					field := &NodeObjField{
-						Description: shared.Dig[string](prop, "description"),
-						Key:         propName,
-						Behavior:    behavior,
-						Updatable:   shared.InMap(propName, updateFields),
-						Readable:    shared.InMap(propName, getFields),
-						Default:     defaultsPrim,
-						Spec:        *propNode,
+						Description:   shared.Dig[string](prop, "description"),
+						Key:           propName,
+						Behavior:      behavior,
+						Updatable:     shared.InMap(propName, updateFields),
+						Readable:      shared.InMap(propName, getFields),
+						Default:       defaultsPrim,
+						ConditionalOn: conditionalOn,
+						Spec:          *propNode,
 					}
 					fields = append(fields, field)
 					fieldsByKey[propName] = field
@@ -703,7 +729,7 @@ func main() {
 			post.RequestBody.Content.FormUrlencoded.Schema,
 			update,
 			Reunmarshal[any](objSpec),
-			FixupFieldDefault[collName],
+			FixupFields[collName],
 		)).(*NodeObj)
 
 		hasActive := false
@@ -769,7 +795,7 @@ func main() {
 					paramsId := "params"
 					g.Add(getClientStmt)
 					g.Add(createDiagStmt)
-					g.Add(jen.Id(paramsId).Op(":=").Add(fields.ValidateSetApi(
+					g.Add(jen.List(jen.Id(paramsId), jen.Id("_")).Op(":=").Add(fields.ValidateSetApi(
 						false,
 						emptyPathExpr,
 						&CreateRootTfSourceVal{
@@ -808,7 +834,7 @@ func main() {
 					paramsId := "params"
 					g.Add(getClientStmt)
 					g.Add(createDiagStmt)
-					g.Add(jen.Id(paramsId).Op(":=").Add(fields.ValidateSetApi(
+					g.Add(jen.List(jen.Id(paramsId), jen.Id("_")).Op(":=").Add(fields.ValidateSetApi(
 						true,
 						emptyPathExpr,
 						&UpdateRootTfSourceVal{
@@ -883,6 +909,6 @@ func main() {
 	log.Printf("Done.")
 }
 
-func FakeScope(t jen.Code, body []jen.Code) jen.Code {
-	return jen.Func().Params().Add(t).Block(body...).Call()
+func FakeScope(body []jen.Code) jen.Code {
+	return jen.Func().Params().Params(jen.Any(), jen.Bool()).Block(body...).Call()
 }

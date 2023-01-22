@@ -19,9 +19,11 @@ type NodeObjField struct {
 	Key         string
 	Behavior    NodeObjFieldBehavior
 	Default     jen.Code
-	Updatable   bool // Only if user behavior
-	Readable    bool // Must be true for computed
-	Spec        Node
+	// Only read if named sibling field is true
+	ConditionalOn string
+	Updatable     bool // Only if user behavior
+	Readable      bool // Must be true for computed
+	Spec          Node
 }
 
 type NodeObj struct {
@@ -98,22 +100,35 @@ func (n *NodeObj) readApiInner(apiSource jen.Code, tfDest TfDestColl) []jen.Code
 		if !field.Readable || !field.Spec.CanRead() {
 			continue
 		}
+		var read []jen.Code
 		if objField, isObj := field.Spec.(*NodeObj); isObj {
 			// Flatten nested objects
-			fields = append(fields, objField.readApiFlat(
+			read = objField.readApiFlat(
 				jen.Qual(SharedPkg, "DigAny").Call(apiSource, jen.Lit(field.Key)),
 				tfDest.FlatField(field.Key),
-			)...)
+			)
 		} else {
 			statements := field.Spec.ReadApi(
 				jen.Qual(SharedPkg, "DigAny").Call(apiSource, jen.Lit(field.Key)),
 				tfDest.Field(field.Key),
 			)
 			if len(statements) > 1 {
-				fields = append(fields, jen.Block(statements...))
+				read = []jen.Code{jen.Block(statements...)}
 			} else {
-				fields = append(fields, statements[0])
+				read = []jen.Code{statements[0]}
 			}
+		}
+		if field.ConditionalOn != "" {
+			fields = append(
+				fields,
+				jen.
+					If(jen.Qual(SharedPkg, "Dig").
+						Index(jen.Bool()).
+						Call(apiSource, jen.Lit(field.ConditionalOn))).
+					Block(read...),
+			)
+		} else {
+			fields = append(fields, read...)
 		}
 	}
 	return fields
@@ -219,24 +234,36 @@ func (n *NodeObj) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 		}
 		if objField, isObj := field.Spec.(*NodeObj); isObj {
 			// Flattened nested objects
-			fields = append(
-				fields,
-				jen.Id(apiDestId).Index(jen.Lit(field.Key)).Op("=").Add(objField.ValidateSetApi(
+			write := jen.Block(
+				jen.List(jen.Id("res"), jen.Id("resOk")).Op(":=").Add(objField.ValidateSetApi(
 					update,
 					tfPath,
 					tfSource.Field(field.Key),
 				)),
+				jen.If(jen.Id("resOk")).Block(jen.Id(apiDestId).Index(jen.Lit(field.Key)).Op("=").Id("res")),
 			)
+			if field.ConditionalOn != "" {
+				fields = append(
+					fields,
+					jen.If(tfSource.Field(field.ConditionalOn).Get()).Block(write),
+				)
+			} else {
+				fields = append(
+					fields,
+					write,
+				)
+			}
 		} else {
 			// Normal fields
 			childChildPath := Unused(func() jen.Code { return jen.Id("path") })
 			if_ := jen.If(jen.List(jen.Id("v"), jen.Id("vOk")).Op(":=").Add(tfSource.Field(field.Key).GetOk()).
 				Op(";").Id("vOk").Op("&&").Add(field.Spec.IsNotDefault(jen.Id("v")))).Block(
-				jen.Id(apiDestId).Index(jen.Lit(field.Key)).Op("=").Add(field.Spec.ValidateSetApi(
+				jen.List(jen.Id("res"), jen.Id("resOk")).Op(":=").Add(field.Spec.ValidateSetApi(
 					update,
 					childChildPath,
 					shared.Pointer(AnyTfSourceVal("v")),
 				)),
+				jen.If(jen.Id("resOk")).Block(jen.Id(apiDestId).Index(jen.Lit(field.Key)).Op("=").Id("res")),
 			)
 			if field.Behavior == NBUserRequired {
 				if_.Else().If(anyPresent.Use()).Block(
@@ -257,6 +284,10 @@ func (n *NodeObj) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 					jen.Id("path").Op(":=").Add(tfPath.Use()).Dot("IndexString").Call(jen.Lit(field.Key)),
 				)
 			}
+			if field.ConditionalOn != "" {
+				if_ = jen.If(jen.List(jen.Id("v"), jen.Id("vOk")).Op(":=").Add(tfSource.Field(field.ConditionalOn).GetOk()).
+					Op(";").Id("vOk").Op("&&").Add(jen.Id("v").Assert(jen.Bool()))).Block(if_)
+			}
 			fields = append(fields, jen.Block(Flatten([][]jen.Code{
 				pre,
 				{if_},
@@ -275,12 +306,11 @@ func (n *NodeObj) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 		pre = append(pre, jen.Id(anyPresentId).Op(":=").Add(cond))
 	}
 	return FakeScope(
-		jen.Any(),
 		Flatten([][]jen.Code{
 			pre,
 			fields,
 			{
-				jen.Return(jen.Id(apiDestId)),
+				jen.Return(jen.Id(apiDestId), jen.Len(jen.Id(apiDestId)).Op(">").Lit(0)),
 			},
 		}),
 	)

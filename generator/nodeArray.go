@@ -58,7 +58,6 @@ func (n *NodeArray) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSour
 		index = jen.Id("_")
 	}
 	return FakeScope(
-		jen.Any(),
 		Flatten([][]jen.Code{
 			pre,
 			{
@@ -67,7 +66,7 @@ func (n *NodeArray) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSour
 				jen.For(jen.List(index, jen.Id("v")).Op(":=").Range().Id(tfSourceId)).Block(
 					jen.Id(apiDestId).Dot("Add").Call(validate),
 				),
-				jen.Return(jen.Id(apiDestId)),
+				jen.Return(jen.Id(apiDestId), jen.Lit(true)),
 				jen.Comment("NodeArray ValidateSetApi END"),
 			},
 		}),

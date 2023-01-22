@@ -51,8 +51,8 @@ func (n *NodeString) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSou
 			}))),
 		)
 	}
-	statements = append(statements, jen.Return(jen.Id(tfSourceId)))
-	return FakeScope(jen.Any(), statements)
+	statements = append(statements, jen.Return(jen.Id(tfSourceId), jen.Lit(true)))
+	return FakeScope(statements)
 }
 
 func (n *NodeString) IsNotDefault(id jen.Code) jen.Code {

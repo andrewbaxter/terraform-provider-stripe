@@ -53,18 +53,19 @@ func (n *NodeFakeMap) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSo
 		index = jen.Id("_")
 	}
 	return FakeScope(
-		jen.Any(),
 		Flatten([][]jen.Code{
 			pre,
 			{
 				jen.Id(tfSourceId).Op(":=").Add(tfSource.Get()).Assert(jen.Index().Any()),
 				jen.Id(apiDestId).Op(":=").Map(jen.String()).Any().Values(),
 				jen.For(jen.List(index, jen.Id("v")).Op(":=").Range().Id(tfSourceId)).Block(
-					jen.Id("subRes").Op(":=").Add(validate),
-					jen.Id("key").Op(":=").Qual(SharedPkg, "DigDelete").Index(jen.String()).Call(jen.Id("subRes"), jen.Lit("key")),
-					jen.Id(apiDestId).Index(jen.Id("key")).Op("=").Id("subRes"),
+					jen.List(jen.Id("subRes"), jen.Id("subResOk")).Op(":=").Add(validate),
+					jen.If(jen.Id("subResOk")).Block(
+						jen.Id("key").Op(":=").Qual(SharedPkg, "DigDelete").Index(jen.String()).Call(jen.Id("subRes"), jen.Lit("key")),
+						jen.Id(apiDestId).Index(jen.Id("key")).Op("=").Id("subRes"),
+					),
 				),
-				jen.Return(jen.Id(apiDestId)),
+				jen.Return(jen.Id(apiDestId), jen.Lit(true)),
 				jen.Comment("NodeFakeMap ValidateSetApi END"),
 			},
 		}),

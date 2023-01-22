@@ -57,7 +57,6 @@ func (n *NodeAnyOfObjs) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tf
 		))
 	}
 	return FakeScope(
-		jen.Any(),
 		Flatten(
 			[][]jen.Code{
 				{
@@ -71,7 +70,7 @@ func (n *NodeAnyOfObjs) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tf
 							Call(jen.Lit("This field is a union, but no set of required fields match any union member.")),
 						jen.Id("AttributePath"): jen.Id("path"),
 					})),
-					jen.Return(jen.Nil()),
+					jen.Return(jen.Nil(), jen.Lit(true)),
 				},
 			},
 		),

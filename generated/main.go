@@ -177,8 +177,10 @@ func NewMutList[T any]() *MutList[T] {
 
 type MutList[T any] []T
 
-func (m *MutList[T]) Add(v T) {
-	(*m) = append(*m, v)
+func (m *MutList[T]) Add(v T, ok bool) {
+	if ok {
+		(*m) = append(*m, v)
+	}
 }
 
 func IsNotDefault[T comparable](v T) bool {

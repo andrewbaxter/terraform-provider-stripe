@@ -20,7 +20,7 @@ func (n *NodeFloat) ReadApi(apiSource jen.Code, tfDest TfDestVal) []jen.Code {
 }
 
 func (n *NodeFloat) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource TfSourceVal) jen.Code {
-	return tfSource.Get()
+	return jen.List(tfSource.Get(), jen.Lit(true))
 }
 
 func (n *NodeFloat) IsNotDefault(id jen.Code) jen.Code {

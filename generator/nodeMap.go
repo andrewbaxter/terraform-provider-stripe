@@ -57,16 +57,18 @@ func (n *NodeMap) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 	}
 	tfSourceId := "outerSource"
 	return FakeScope(
-		jen.Any(),
 		Flatten([][]jen.Code{
 			pre,
 			{
 				jen.Id(tfSourceId).Op(":=").Add(tfSource.Get()).Assert(jen.Map(jen.String()).Any()),
 				jen.Id(apiDestId).Op(":=").Map(jen.String()).Any().Values(),
 				jen.For(jen.List(jen.Id("k"), jen.Id("v")).Op(":=").Range().Id(tfSourceId)).Block(
-					jen.Id(apiDestId).Index(jen.Id("k")).Op("=").Add(validate),
+					jen.List(jen.Id("res"), jen.Id("resOk")).Op(":=").Add(validate),
+					jen.If(jen.Id("resOk")).Block(
+						jen.Id(apiDestId).Index(jen.Id("k")).Op("=").Id("res"),
+					),
 				),
-				jen.Return(jen.Id(apiDestId)),
+				jen.Return(jen.Id(apiDestId), jen.Lit(true)),
 				jen.Comment("NodeMap ValidateSetApi END"),
 			},
 		}),
