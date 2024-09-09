@@ -165,8 +165,23 @@ func inResourceData(key string, d *schema.ResourceData) bool {
 func fmtPath(path cty.Path) string {
 	out := []string{}
 	for _, k := range path {
-		k0 := k.(cty.IndexStep)
-		out = append(out, "/"+k0.Key.AsString())
+		var e1 string
+		switch e := k.(type) {
+		case cty.GetAttrStep:
+			e1 = e.Name
+		case cty.IndexStep:
+			switch e.Key.Type() {
+			case cty.Number:
+				e1 = e.Key.AsBigFloat().String()
+			case cty.String:
+				e1 = e.Key.AsString()
+			default:
+				e1 = "(unknown type of path index step value)"
+			}
+		default:
+			e1 = "(unknown type of path index step)"
+		}
+		out = append(out, "/"+e1)
 	}
 	return strings.Join(out, "")
 }

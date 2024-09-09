@@ -6,6 +6,10 @@ This is now (as of 2022-11-26) nominally working. If this works for you I'd also
 
 * [Terraform Registry](https://registry.terraform.io/providers/andrewbaxter/stripe)
 
+# Installation with Terraform
+
+See the dropdown on the Registry page.
+
 # Installation with Terraform CDK
 
 Run
@@ -13,10 +17,6 @@ Run
 ```
 cdktf provider add andrewbaxter/stripe
 ```
-
-# Installation with Terraform
-
-See the dropdown on the Registry page.
 
 # Documentation
 
