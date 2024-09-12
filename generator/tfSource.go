@@ -7,6 +7,7 @@ import (
 type TfSourceVal interface {
 	Get() jen.Code
 	GetOk() jen.Code
+	TfFieldName() string
 	Ok() jen.Code
 	Field(key string) TfSourceVal
 }
@@ -27,6 +28,10 @@ func (d *CreateRootTfSourceVal) GetOk() jen.Code {
 
 func (d *CreateRootTfSourceVal) Ok() jen.Code {
 	return jen.Id("inResourceData").Call(jen.Lit(d.Key), jen.Id(d.Base))
+}
+
+func (d *CreateRootTfSourceVal) TfFieldName() string {
+	return d.Key
 }
 
 func (d *CreateRootTfSourceVal) Field(key string) TfSourceVal {
@@ -60,6 +65,10 @@ func (d *UpdateRootTfSourceVal) Ok() jen.Code {
 	return jen.Id(d.Base).Dot("HasChange").Call(jen.Lit(d.Key))
 }
 
+func (d *UpdateRootTfSourceVal) TfFieldName() string {
+	return d.Key
+}
+
 func (d *UpdateRootTfSourceVal) Field(key string) TfSourceVal {
 	var newKey string
 	if d.Key == "" {
@@ -86,6 +95,10 @@ func (d *AnyTfSourceVal) GetOk() jen.Code {
 
 func (d *AnyTfSourceVal) Ok() jen.Code {
 	return jen.True()
+}
+
+func (d *AnyTfSourceVal) TfFieldName() string {
+	return string(*d)
 }
 
 func (d *AnyTfSourceVal) Field(key string) TfSourceVal {
@@ -120,6 +133,10 @@ func (d *MapTfSourceVal) GetOk() jen.Code {
 
 func (d *MapTfSourceVal) Ok() jen.Code {
 	return jen.Qual(SharedPkg, "InMap").Call(jen.Lit(d.Key), jen.Id(d.Base).Assert(jen.Map(jen.String()).Any()))
+}
+
+func (d *MapTfSourceVal) TfFieldName() string {
+	return d.Key
 }
 
 func (d *MapTfSourceVal) Field(key string) TfSourceVal {

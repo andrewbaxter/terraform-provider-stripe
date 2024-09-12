@@ -285,7 +285,7 @@ func BuildNode(
 				allowedValues = append(allowedValues, type_)
 			case "string":
 				enum := shared.Dig[[]any](sub, "enum")
-				if enum != nil && len(enum) == 1 && enum[0].(string) == "" {
+				if len(enum) == 1 && enum[0].(string) == "" {
 					continue
 				}
 				str = true
@@ -397,14 +397,6 @@ func BuildNode(
 			seenRefs = DeepCopy(seenRefs)
 			seenRefs[ref_] = true
 		}
-	}
-
-	desc := ""
-	if createSpec != nil {
-		desc = desc + shared.Dig[string](createSpec, "description")
-	}
-	if getSpec != nil {
-		desc = desc + shared.Dig[string](getSpec, "description")
 	}
 
 	var type_ = ""

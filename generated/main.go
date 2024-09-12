@@ -158,8 +158,11 @@ func inEnum(s string, values []string) bool {
 }
 
 func inResourceData(key string, d *schema.ResourceData) bool {
-	_, ok := d.GetOk(key)
-	return ok
+	v, ok := d.GetOk(key)
+	if !ok {
+		return false
+	}
+	return shared.AnyIsNotZero(v, ok)
 }
 
 func fmtPath(path cty.Path) string {

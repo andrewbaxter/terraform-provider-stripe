@@ -193,6 +193,7 @@ func (n *NodeObj) checkAnyReq() bool {
 func (n *NodeObj) buildAnyTfFieldsPresent(tfSource TfSourceVal) *jen.Statement {
 	var cond *jen.Statement = nil
 	for _, f := range n.Fields {
+		// The required nested fields serve as keys that pull in all other fields
 		if f.Behavior != NBUserRequired {
 			continue
 		}
@@ -209,7 +210,7 @@ func (n *NodeObj) buildAnyTfFieldsPresent(tfSource TfSourceVal) *jen.Statement {
 		if cond == nil {
 			cond = jen.Add(inner)
 		} else {
-			cond.Op("&&").Add(inner)
+			cond.Op("||").Add(inner)
 		}
 	}
 	return cond
@@ -256,7 +257,8 @@ func (n *NodeObj) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 		} else {
 			// Normal fields
 			childChildPath := Unused(func() jen.Code { return jen.Id("path") })
-			if_ := jen.If(jen.List(jen.Id("v"), jen.Id("vOk")).Op(":=").Add(tfSource.Field(field.Key).GetOk()).
+			tfSourceField := tfSource.Field(field.Key)
+			if_ := jen.If(jen.List(jen.Id("v"), jen.Id("vOk")).Op(":=").Add(tfSourceField.GetOk()).
 				Op(";").Id("vOk").Op("&&").Add(field.Spec.IsNotDefault(jen.Id("v")))).Block(
 				jen.List(jen.Id("res"), jen.Id("resOk")).Op(":=").Add(field.Spec.ValidateSetApi(
 					update,
@@ -281,7 +283,7 @@ func (n *NodeObj) ValidateSetApi(update bool, tfPath *Usable[jen.Code], tfSource
 			if childChildPath.WasUsed() {
 				pre = append(
 					pre,
-					jen.Id("path").Op(":=").Add(tfPath.Use()).Dot("IndexString").Call(jen.Lit(field.Key)),
+					jen.Id("path").Op(":=").Add(tfPath.Use()).Dot("IndexString").Call(jen.Lit(tfSourceField.TfFieldName())),
 				)
 			}
 			if field.ConditionalOn != "" {
